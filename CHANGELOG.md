@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ### Changed
 
 - Improves file system event filtering performance by using sync filters and buffering events during Git ignore rule loading ([#4919](https://github.com/gitkraken/vscode-gitlens/issues/4919))
+- Stops creating new GitHub sessions via VS Code built-in authentication; new connections now always use the GKDev flow, while existing built-in sessions are still used if available ([#4881](https://github.com/gitkraken/vscode-gitlens/issues/4881))
 
 ### Fixed
 
@@ -20,6 +21,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Fixes an issue where diffing untracked files in the _Commit Composer_ could trigger unwanted file system events ([#4917](https://github.com/gitkraken/vscode-gitlens/issues/4917))
 - Fixes an issue where commit messages become invisible during interactive rebase in some themes ([#4886](https://github.com/gitkraken/vscode-gitlens/issues/4886))
 - Fixes issue in the _Commit Graph_ minimap where it only shows a spinner when the repo has no commits [#4741](https://github.com/gitkraken/vscode-gitlens/issues/4741)
+- Fixes issues with the "Reauthenticate" flow not taking effect ([#4881](https://github.com/gitkraken/vscode-gitlens/issues/4881))
 
 ## [17.9.0] - 2026-01-13
 
