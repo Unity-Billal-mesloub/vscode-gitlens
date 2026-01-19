@@ -713,7 +713,6 @@ export interface RemotesUrlsConfig {
 
 interface SigningConfig {
 	readonly showSetupWizard: boolean;
-	readonly showStatusBar: boolean;
 	readonly showSignatureBadges: boolean;
 	readonly enableKeyGeneration: boolean;
 }
