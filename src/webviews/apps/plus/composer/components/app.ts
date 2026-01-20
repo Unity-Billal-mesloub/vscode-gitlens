@@ -384,6 +384,11 @@ export class ComposerApp extends LitElement {
 	private anchorCommitId: string | null = null;
 
 	@state()
+	private detailsPanelCommitIds: Set<string> = new Set();
+
+	private detailsUpdateFrameId?: number;
+
+	@state()
 	private selectedHunkId: string | null = null;
 
 	@state()
@@ -972,6 +977,21 @@ export class ComposerApp extends LitElement {
 		}
 	}
 
+	private scheduleDetailsPanelUpdate() {
+		if (this.detailsUpdateFrameId) {
+			cancelAnimationFrame(this.detailsUpdateFrameId);
+		}
+
+		this.detailsUpdateFrameId = requestAnimationFrame(() => {
+			const selectedCommitIds = new Set(this.selectedCommitIds);
+			if (this.selectedCommitId && !this.selectedUnassignedSection) {
+				selectedCommitIds.add(this.selectedCommitId);
+			}
+			this.detailsPanelCommitIds = selectedCommitIds;
+			this.detailsUpdateFrameId = undefined;
+		});
+	}
+
 	private selectCommit(commitId: string, shiftKey = false) {
 		if (shiftKey) {
 			const isRecomposeMode = this.state?.recompose?.enabled === true;
@@ -1033,6 +1053,8 @@ export class ComposerApp extends LitElement {
 		this.selectedUnassignedSection = null;
 		this.compositionSummarySelected = false;
 
+		this.scheduleDetailsPanelUpdate();
+
 		void this.updateComplete.then(() => {
 			setTimeout(() => {
 				this.initializeHunksSortable();
@@ -1053,6 +1075,8 @@ export class ComposerApp extends LitElement {
 		this.selectedHunkId = null;
 		this.selectedHunkIds = new Set();
 		this.compositionSummarySelected = false;
+
+		this.scheduleDetailsPanelUpdate();
 
 		// Reinitialize sortables after the DOM updates to include unassigned hunks
 		void this.updateComplete.then(() => {
@@ -1491,6 +1515,8 @@ export class ComposerApp extends LitElement {
 		this.selectedCommitIds = new Set();
 		this.selectedUnassignedSection = null;
 		this.compositionSummarySelected = true;
+
+		this.scheduleDetailsPanelUpdate();
 	}
 
 	private handleCompositionFeedbackHelpful(e: CustomEvent) {
@@ -1521,6 +1547,8 @@ export class ComposerApp extends LitElement {
 		this.selectedCommitIds.clear();
 		this.selectedCommitIds.add(commitId);
 		this.selectedUnassignedSection = null;
+
+		this.scheduleDetailsPanelUpdate();
 
 		// Focus the commit message input in the details panel
 		this.requestUpdate();
@@ -1629,6 +1657,7 @@ export class ComposerApp extends LitElement {
 		this.state.commits = newCommits;
 		this.selectedCommitIds = new Set();
 		this.selectedCommitId = combinedCommit.id;
+		this.scheduleDetailsPanelUpdate();
 		this.requestUpdate();
 	}
 
@@ -1638,12 +1667,8 @@ export class ComposerApp extends LitElement {
 			return html`<div class="loading">Loading...</div>`;
 		}
 
-		// Include both single selected commit and multi-selected commits
-		const selectedCommitIds = new Set(this.selectedCommitIds);
-		if (this.selectedCommitId && !this.selectedUnassignedSection) {
-			selectedCommitIds.add(this.selectedCommitId);
-		}
-		const selectedCommits = Array.from(selectedCommitIds)
+		// Use detailsPanelCommitIds for the details panel (deferred update)
+		const selectedCommits = Array.from(this.detailsPanelCommitIds)
 			.map(id => this.state.commits.find(c => c.id === id))
 			.filter(Boolean) as ComposerCommit[];
 
