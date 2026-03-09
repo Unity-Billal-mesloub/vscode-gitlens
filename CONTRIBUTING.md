@@ -253,11 +253,11 @@ Once you've finished copy the new `glicons.woff2?<uuid>` URL from `src/webviews/
 
 ## Testing (Unity and E2E)
 
-GitLens uses VS Code's testing infrastructure for unit and integration tests.
+GitLens uses VS Code's testing infrastructure for unity and integration tests.
 
 ### Building Tests
 
-Unit and E2E tests are built as part of the main build, but can also be built directly.
+Unity and E2E tests are built as part of the main build, but can also be built directly.
 
 ```bash
 # Build everything (extension, webviews, and tests)
