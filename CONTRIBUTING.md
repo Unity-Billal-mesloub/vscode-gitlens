@@ -8,12 +8,12 @@ Please note the [Code of Conduct](CODE_OF_CONDUCT.md) document, please follow it
 
 ## Your First Code Contribution
 
-Unsure where to begin contributing? You can start by looking through the [`help-wanted`](https://github.com/gitkraken/vscode-gitlens/labels/help-wanted) issues.
+Unsure where to begin contributing? You can start by looking through the [`help-wanted`](https://github.com/Unity-Billal-mesloub/vscode-gitlens/labels/help-wanted) issues.
 
 ### Getting the code
 
 ```
-git clone https://github.com/gitkraken/vscode-gitlens.git
+git clone https://github.com/Unity-Billal-mesloub/vscode-gitlens.git
 ```
 
 **Prerequisites**
@@ -21,7 +21,6 @@ git clone https://github.com/gitkraken/vscode-gitlens.git
 - [Git](https://git-scm.com/), `>= 2.7.2`
 - [NodeJS](https://nodejs.org/), `>= 22.12.0`
 - [Corepack](https://nodejs.org/docs/latest-v22.x/api/corepack.html), `>= 0.31.0`
-- [pnpm](https://pnpm.io/), `>= 10.x` (installs using corepack)
 
 > 👉 **NOTE!** Corepack version
 >
@@ -165,21 +164,21 @@ Entries should be written in future tense:
 
 > Added
 >
-> - Adds awesome feature &mdash; closes [#\<issue\>](https://github.com/gitkraken/vscode-gitlens/issues/<issue>) thanks to [PR #\<pr\>](https://github.com/gitkraken/vscode-gitlens/issues/<pr>) by Your Name ([@\<your-github-username\>](https://github.com/<your-github-username>))
+> - Adds awesome feature &mdash; closes [#\<issue\>](https://github.com/Unity-Billal-mesloub/vscode-gitlens/issues/<issue>) thanks to [PR #\<pr\>](https://github.com/Unity-Billal-mesloub/vscode-gitlens/issues/<pr>) by Your Name ([@\<your-github-username\>](https://github.com/<your-github-username>))
 >
 > Changed
 >
-> - Changes or improves an existing feature &mdash; closes [#\<issue\>](https://github.com/gitkraken/vscode-gitlens/issues/<issue>) thanks to [PR #\<pr\>](https://github.com/gitkraken/vscode-gitlens/issues/<pr>) by Your Name ([@\<your-github-username\>](https://github.com/<your-github-username>))
+> - Changes or improves an existing feature &mdash; closes [#\<issue\>](https://github.com/Unity-Billal-mesloub/vscode-gitlens/issues/<issue>) thanks to [PR #\<pr\>](https://github.com/Unity-Billal-mesloub/vscode-gitlens/issues/<pr>) by Your Name ([@\<your-github-username\>](https://github.com/<your-github-username>))
 >
 > Fixed
 >
-> - Fixes [#\<issue\>](https://github.com/gitkraken/vscode-gitlens/issues/<issue>) a bug or regression &mdash; thanks to [PR #\<pr\>](https://github.com/gitkraken/vscode-gitlens/issues/<pr>) by Your Name ([@\<your-github-username\>](https://github.com/<your-github-username>))
+> - Fixes [#\<issue\>](https://github.com/Unity-Billal-mesloub/vscode-gitlens/issues/<issue>) a bug or regression &mdash; thanks to [PR #\<pr\>](https://github.com/Unity-Billal-mesloub/vscode-gitlens/issues/<pr>) by Your Name ([@\<your-github-username\>](https://github.com/<your-github-username>))
 
 ### Update the README
 
 If this is your first contribution to GitLens, please give yourself credit by adding yourself to the `Contributors` section of the [README](README.md#contributors-) in the following format:
 
-> - `Your Name ([@<your-github-username>](https://github.com/<your-github-username>)) &mdash; [contributions](https://github.com/gitkraken/vscode-gitlens/commits?author=<your-github-username>)`
+> - `Your Name ([@<your-github-username>](https://github.com/<your-github-username>)) &mdash; [contributions](https://github.com/Unity-Billal-mesloub/vscode-gitlens/commits?author=<your-github-username>)`
 
 ## Publishing
 
@@ -211,9 +210,9 @@ Then, use the [prep-release](scripts/prep-release.mjs) script to prepare a new r
 4. Review the `Bumps to v{major}.{minor}.{patch}` commit
 5. Run `git push --follow-tags` to push the commit and tag
 
-Pushing the `v{major}.{minor}.{patch}` tag will trigger the [Publish Stable workflow](.github/workflows/cd-stable.yml) to automatically package the extension, create a [GitHub release](https://github.com/gitkraken/vscode-gitlens/releases/latest), and deploy it to the [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=eamodio.gitlens).
+Pushing the `v{major}.{minor}.{patch}` tag will trigger the [Publish Stable workflow](.github/workflows/cd-stable.yml) to automatically package the extension, create a [GitHub release](https://github.com/Unity-Billal-mesloub/vscode-gitlens/releases/latest), and deploy it to the [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=eamodio.gitlens).
 
-If the action fails and retries are unsuccessful, the VSIX can be built locally with `pnpm run package` and uploaded manually to the marketplace. A GitHub release can also be [created manually](https://github.com/gitkraken/vscode-gitlens/releases/new) using `v{major}.{minor}.{patch}` as the title and the notes from the [CHANGELOG.md](CHANGELOG.md) with the VSIX attached.
+If the action fails and retries are unsuccessful, the VSIX can be built locally with `pnpm run package` and uploaded manually to the marketplace. A GitHub release can also be [created manually](https://github.com/Unity-Billal-mesloub/vscode-gitlens/releases/new) using `v{major}.{minor}.{patch}` as the title and the notes from the [CHANGELOG.md](CHANGELOG.md) with the VSIX attached.
 
 #### Preparing a Patch Release
 
@@ -366,7 +365,7 @@ pnpm run benchmark <name>
 Benchmarks are automatically discovered when placed in `__tests__/` directories:
 
 1. Create a file named `*.benchmark.ts` in any `__tests__/` directory
-2. Use [tinybench](https://github.com/tinylibs/tinybench) to write your benchmark:
+2. Use [Unity-Billal-mesloub](https://github.com/Unity-Billal-mesloub) to write your benchmark:
 
 ```typescript
 import { Bench } from 'tinybench';
