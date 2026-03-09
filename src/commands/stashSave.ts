@@ -23,6 +23,7 @@ export interface StashSaveCommandArgs {
 	keepStaged?: boolean;
 	onlyStaged?: boolean;
 	onlyStagedUris?: Uri[];
+	reducedConfirm?: boolean;
 }
 
 @command()
@@ -72,6 +73,13 @@ export class StashSaveCommand extends GlCommandBase {
 		} else if (context.type === 'scm-groups') {
 			args = await getStashSaveArgsForScmGroups(this.container, context, args);
 			if (args == null) return;
+		} else if (context.command === 'gitlens.stashSave.unstaged:scm') {
+			const repo = this.container.git.getBestRepository();
+			if (repo != null) {
+				args = await getStashSaveArgsForUnstagedScmGroup(repo, { ...args, repoPath: repo.path });
+			}
+
+			if (args == null) return;
 		}
 
 		return this.execute(args);
@@ -86,6 +94,7 @@ export class StashSaveCommand extends GlCommandBase {
 			args?.keepStaged,
 			args?.onlyStaged,
 			args?.onlyStagedUris,
+			args?.reducedConfirm,
 		);
 	}
 }
@@ -298,6 +307,7 @@ async function getStashSaveArgsForUnstagedScmGroup(
 		args.keepStaged = true;
 	}
 	args.includeUntracked = hasUntracked;
+	args.reducedConfirm = true;
 
 	return args;
 }

@@ -9,9 +9,8 @@ import { getTagParser } from '../../../../git/parsers/refParser.js';
 import type { TagSortOptions } from '../../../../git/utils/-webview/sorting.js';
 import { sortTags } from '../../../../git/utils/-webview/sorting.js';
 import { filterMap } from '../../../../system/array.js';
-import { log } from '../../../../system/decorators/log.js';
-import { Logger } from '../../../../system/logger.js';
-import { getLogScope } from '../../../../system/logger.scope.js';
+import { debug } from '../../../../system/decorators/log.js';
+import { getScopedLogger } from '../../../../system/logger.scope.js';
 import { maybeStopWatch } from '../../../../system/stopwatch.js';
 import type { Git } from '../git.js';
 import { getGitCommandError } from '../git.js';
@@ -25,7 +24,7 @@ export class TagsGitSubProvider implements GitTagsSubProvider {
 		private readonly cache: GitCache,
 	) {}
 
-	@log()
+	@debug()
 	async getTag(repoPath: string, name: string, cancellation?: CancellationToken): Promise<GitTag | undefined> {
 		const {
 			values: [tag],
@@ -33,7 +32,7 @@ export class TagsGitSubProvider implements GitTagsSubProvider {
 		return tag;
 	}
 
-	@log({ args: { 1: false } })
+	@debug({ args: repoPath => ({ repoPath: repoPath }) })
 	async getTags(
 		repoPath: string,
 		options?: {
@@ -45,9 +44,9 @@ export class TagsGitSubProvider implements GitTagsSubProvider {
 	): Promise<PagedResult<GitTag>> {
 		if (repoPath == null) return emptyPagedResult;
 
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
-		const resultsPromise = this.cache.tags.getOrCreate(repoPath, async cancellable => {
+		let tagsResult = await this.cache.getTags(repoPath, async (commonPath, _cacheable) => {
 			try {
 				const parser = getTagParser();
 
@@ -59,7 +58,7 @@ export class TagsGitSubProvider implements GitTagsSubProvider {
 				);
 				if (!result.stdout) return emptyPagedResult;
 
-				using sw = maybeStopWatch(scope, { log: false, logLevel: 'debug' });
+				using sw = maybeStopWatch(scope, { log: { onlyExit: true, level: 'debug' } });
 
 				const tags: GitTag[] = [];
 
@@ -67,7 +66,7 @@ export class TagsGitSubProvider implements GitTagsSubProvider {
 					tags.push(
 						new GitTag(
 							this.container,
-							repoPath,
+							commonPath,
 							entry.name,
 							entry.sha || entry.tagSha,
 							entry.message,
@@ -81,32 +80,28 @@ export class TagsGitSubProvider implements GitTagsSubProvider {
 
 				return { values: tags };
 			} catch (ex) {
-				cancellable.invalidate();
-				Logger.error(ex, scope);
+				scope?.error(ex);
 				if (isCancellationError(ex)) throw ex;
 
 				return emptyPagedResult;
 			}
 		});
 
-		if (resultsPromise == null) return emptyPagedResult;
-
-		let result = await resultsPromise;
 		if (options?.filter != null) {
-			result = {
-				...result,
-				values: result.values.filter(options.filter),
+			tagsResult = {
+				...tagsResult,
+				values: tagsResult.values.filter(options.filter),
 			};
 		}
 
 		if (options?.sort) {
-			sortTags(result.values, typeof options.sort === 'boolean' ? undefined : options.sort);
+			sortTags(tagsResult.values, typeof options.sort === 'boolean' ? undefined : options.sort);
 		}
 
-		return result;
+		return tagsResult;
 	}
 
-	@log()
+	@debug()
 	async getTagsWithCommit(
 		repoPath: string,
 		sha: string,
@@ -124,7 +119,7 @@ export class TagsGitSubProvider implements GitTagsSubProvider {
 		return filterMap(result.stdout.split('\n'), b => b.trim() || undefined);
 	}
 
-	@log()
+	@debug()
 	async createTag(repoPath: string, name: string, sha: string, message?: string): Promise<void> {
 		const args = ['tag', name, sha];
 		if (message != null && message.length > 0) {
@@ -146,7 +141,7 @@ export class TagsGitSubProvider implements GitTagsSubProvider {
 		}
 	}
 
-	@log()
+	@debug()
 	async deleteTag(repoPath: string, name: string): Promise<void> {
 		const args = ['tag', '-d', name];
 

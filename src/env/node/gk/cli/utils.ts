@@ -1,10 +1,10 @@
 import { chmod, mkdir, readFile, writeFile } from 'fs/promises';
 import { dirname, resolve, sep } from 'path';
-import { window } from 'vscode';
+import { Uri, window } from 'vscode';
 import { urls } from '../../../../constants.js';
 import { Container } from '../../../../container.js';
-import { openUrl } from '../../../../system/-webview/vscode/uris.js';
-import { joinPaths } from '../../../../system/path.js';
+import { exists, openUrl } from '../../../../system/-webview/vscode/uris.js';
+import { maybeStartScopedLogger } from '../../../../system/logger.scope.js';
 import { run } from '../../git/shell.js';
 import { getPlatform } from '../../platform.js';
 
@@ -77,6 +77,18 @@ export async function extractZipFile(
 	}
 }
 
+export function getCLIExecutable(cliPath?: string | null): Uri {
+	return Uri.joinPath(
+		Uri.file(cliPath ?? Container.instance.context.globalStorageUri.fsPath),
+		getPlatform() === 'windows' ? 'gk.exe' : 'gk',
+	);
+}
+
+export async function resolveCLIExecutable(cliPath?: string | null): Promise<Uri | undefined> {
+	const uri = getCLIExecutable(cliPath);
+	return (await exists(uri)) ? uri : undefined;
+}
+
 export function toMcpInstallProvider<T extends string | undefined>(appHostName: T): T {
 	switch (appHostName) {
 		case 'code':
@@ -91,14 +103,50 @@ export function toMcpInstallProvider<T extends string | undefined>(appHostName: 
 }
 
 export async function runCLICommand(args: string[], options?: { cwd?: string }): Promise<string> {
-	const cwd = options?.cwd ?? Container.instance.storage.getScoped('gk:cli:path');
-	if (cwd == null) {
+	const cwd = options?.cwd ?? Container.instance.context.globalStorageUri.fsPath;
+	const command = (await resolveCLIExecutable(cwd))?.fsPath;
+	using scope = maybeStartScopedLogger(
+		`${command} ${args[0] === 'auth' ? '[auth]' : args.join(' ')}`,
+		{ level: 'trace' },
+		{ scopeLabel: 'CLI' },
+	);
+
+	if (command == null) {
+		scope?.setFailed('CLI is not installed');
 		debugger;
 		throw new Error('CLI is not installed');
 	}
 
-	const platform = getPlatform();
-	return run(joinPaths(cwd, platform === 'windows' ? 'gk.exe' : 'gk'), args, 'utf8', { cwd: cwd });
+	// eslint-disable-next-line no-return-await -- await is needed for the scope to be properly disposed
+	return await run(command, args, 'utf8', { cwd: cwd });
+}
+
+const CLIVersionOutputs = {
+	core: /CLI Core: (\d+\.\d+\.\d+)/,
+	installer: /CLI Installer: (\d+\.\d+\.\d+)/,
+} as const;
+
+export async function getCLIVersions(cliPath?: string): Promise<{ proxy: string; core: string } | undefined> {
+	try {
+		const output = await runCLICommand(['version'], cliPath ? { cwd: cliPath } : undefined);
+		const coreMatch = output.match(CLIVersionOutputs.core)?.[1];
+		const installerMatch = output.match(CLIVersionOutputs.installer)?.[1];
+
+		if (!coreMatch || !installerMatch) {
+			throw new Error(`Unexpected CLI version output: ${output}`);
+		}
+
+		return {
+			core: coreMatch,
+			proxy: installerMatch,
+		};
+	} catch (ex) {
+		if (ex instanceof Error && ex.message.includes('CLI is not installed')) {
+			return undefined;
+		}
+		debugger;
+		throw ex;
+	}
 }
 
 export async function showManualMcpSetupPrompt(message: string): Promise<void> {

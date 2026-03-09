@@ -20,7 +20,7 @@ import {
 } from '../plus/integrations/utils/-webview/integration.utils.js';
 import { configuration } from '../system/-webview/configuration.js';
 import { fromNow } from '../system/date.js';
-import { debug } from '../system/decorators/log.js';
+import { trace } from '../system/decorators/log.js';
 import { encodeUrl } from '../system/encoding.js';
 import { join, map } from '../system/iterable.js';
 import { Logger } from '../system/logger.js';
@@ -46,6 +46,8 @@ import {
 } from './utils/-webview/autolinks.utils.js';
 
 const emptyAutolinkMap = Object.freeze(new Map<string, Autolink>());
+const tokenRegex = /(\x00\d+\x00)/g; // eslint-disable-line no-control-regex
+const quoteRegex = /"/g;
 
 export class AutolinksProvider implements Disposable {
 	private _disposable: Disposable | undefined;
@@ -166,7 +168,7 @@ export class AutolinksProvider implements Disposable {
 		return getBranchAutolinks(branchName, refsets);
 	}
 
-	@debug<AutolinksProvider['getAutolinks']>({ args: { 0: '<message>', 1: false } })
+	@trace({ args: () => ({ message: '<message>' }) })
 	async getAutolinks(message: string, remote?: GitRemote): Promise<Map<string, Autolink>> {
 		const refsets = await this.getRefSets(remote);
 		if (!refsets.length) return emptyAutolinkMap;
@@ -186,12 +188,12 @@ export class AutolinksProvider implements Disposable {
 		autolinks: Map<string, Autolink>,
 		remote: GitRemote | undefined,
 	): Promise<Map<string, EnrichedAutolink> | undefined>;
-	@debug<AutolinksProvider['getEnrichedAutolinks']>({
-		args: {
-			0: messageOrAutolinks =>
+	@trace({
+		args: (messageOrAutolinks, remote) => ({
+			messageOrAutolinks:
 				typeof messageOrAutolinks === 'string' ? '<message>' : `autolinks=${messageOrAutolinks.size}`,
-			1: remote => remote?.remoteKey,
-		},
+			remote: remote?.remoteKey,
+		}),
 	})
 	async getEnrichedAutolinks(
 		messageOrAutolinks: string | Map<string, Autolink>,
@@ -224,11 +226,9 @@ export class AutolinksProvider implements Disposable {
 							// Either way, this converting/casting hackery needs to go away.
 							(getIntegrationIdForRemote(link.provider as RemoteProvider) ??
 							convertRemoteProviderIdToIntegrationId(link.provider.id as RemoteProviderId));
-				if (integrationId == null) {
-					// Fall back to the old logic assuming that integration id might be saved as provider id.
-					// TODO: it should be removed when we put providers and integrations in order. Conversation: https://github.com/gitkraken/vscode-gitlens/pull/3996#discussion_r1936422826
-					integrationId = link.provider.id as IntegrationIds;
-				}
+				// Fall back to the old logic assuming that integration id might be saved as provider id.
+				// TODO: it should be removed when we put providers and integrations in order. Conversation: https://github.com/gitkraken/vscode-gitlens/pull/3996#discussion_r1936422826
+				integrationId ??= link.provider.id as IntegrationIds;
 				try {
 					linkIntegration = await this.container.integrations.get(integrationId);
 				} catch (e) {
@@ -267,13 +267,14 @@ export class AutolinksProvider implements Disposable {
 		return enrichedAutolinks;
 	}
 
-	@debug<AutolinksProvider['linkify']>({
-		args: {
-			0: '<text>',
-			2: remotes => remotes?.length,
-			3: issuesAndPullRequests => issuesAndPullRequests?.size,
-			4: footnotes => footnotes?.size,
-		},
+	@trace({
+		args: (_text, outputFormat, remotes, enrichedAutolinks, prs) => ({
+			text: '<text>',
+			outputFormat: outputFormat,
+			remotes: remotes?.length,
+			enrichedAutolinks: enrichedAutolinks?.size,
+			prs: prs?.size,
+		}),
 	})
 	linkify(
 		text: string,
@@ -325,7 +326,7 @@ export class AutolinksProvider implements Disposable {
 			}
 
 			if (remotes?.length) {
-				remotes = [...remotes].sort((a, b) => {
+				remotes = remotes.toSorted((a, b) => {
 					const aConnected = a.maybeIntegrationConnected;
 					const bConnected = b.maybeIntegrationConnected;
 					return aConnected !== bConnected ? (aConnected ? -1 : bConnected ? 1 : 0) : 0;
@@ -353,8 +354,7 @@ export class AutolinksProvider implements Disposable {
 		}
 
 		if (tokenMapping.size) {
-			// eslint-disable-next-line no-control-regex
-			text = text.replace(/(\x00\d+\x00)/g, (_, t: string) => tokenMapping.get(t) ?? t);
+			text = text.replace(tokenRegex, (_, t: string) => tokenMapping.get(t) ?? t);
 		}
 
 		if (includeFootnotesInText && footnotes?.size) {
@@ -428,7 +428,7 @@ export class AutolinksProvider implements Disposable {
 										} else {
 											const issue = issueResult.value;
 											const issueTitle = escapeMarkdown(issue.title.trim());
-											const issueTitleQuoteEscaped = issueTitle.replace(/"/g, '\\"');
+											const issueTitleQuoteEscaped = issueTitle.replace(quoteRegex, '\\"');
 
 											urlCommandContext.provider = issue.provider && {
 												id: issue.provider.id,
@@ -516,7 +516,7 @@ export class AutolinksProvider implements Disposable {
 										} else {
 											const issue = issueResult.value;
 											const issueTitle = encodeHtmlWeak(issue.title.trim());
-											const issueTitleQuoteEscaped = issueTitle.replace(/"/g, '&quot;');
+											const issueTitleQuoteEscaped = issueTitle.replace(quoteRegex, '&quot;');
 
 											if (footnotes != null && !prs?.has(num)) {
 												footnoteIndex = footnotes.size + 1;

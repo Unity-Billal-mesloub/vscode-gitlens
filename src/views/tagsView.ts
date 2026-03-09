@@ -5,7 +5,6 @@ import type { Container } from '../container.js';
 import { GitUri } from '../git/gitUri.js';
 import type { GitTagReference } from '../git/models/reference.js';
 import type { RepositoryChangeEvent } from '../git/models/repository.js';
-import { RepositoryChange, RepositoryChangeComparisonMode } from '../git/models/repository.js';
 import { getReferenceLabel } from '../git/utils/reference.utils.js';
 import { executeCommand } from '../system/-webview/command.js';
 import { configuration } from '../system/-webview/configuration.js';
@@ -23,15 +22,13 @@ import { registerViewCommand } from './viewCommands.js';
 
 export class TagsRepositoryNode extends RepositoryFolderNode<TagsView, TagsNode> {
 	async getChildren(): Promise<ViewNode[]> {
-		if (this.child == null) {
-			this.child = new TagsNode(this.uri, this.view, this, this.repo);
-		}
+		this.child ??= new TagsNode(this.uri, this.view, this, this.repo);
 
 		return this.child.getChildren();
 	}
 
 	protected changed(e: RepositoryChangeEvent): boolean {
-		return e.changed(RepositoryChange.Tags, RepositoryChange.Unknown, RepositoryChangeComparisonMode.Any);
+		return e.changed('tags', 'unknown');
 	}
 }
 
@@ -45,14 +42,15 @@ export class TagsViewNode extends RepositoriesSubscribeableNode<TagsView, TagsRe
 				await this.view.container.git.isDiscoveringRepositories;
 			}
 
-			const repositories = await this.view.getFilteredRepositories();
+			const repositories = this.view.getFilteredRepositories();
 			if (!repositories.length) {
 				this.view.message = 'No tags could be found.';
 				return [];
 			}
 
+			const repo = this.view.container.git.getBestRepositoryOrFirst();
 			this.children = repositories.map(
-				r => new TagsRepositoryNode(GitUri.fromRepoPath(r.path), this.view, this, r),
+				r => new TagsRepositoryNode(GitUri.fromRepoPath(r.path), this.view, this, r, { expand: r === repo }),
 			);
 		}
 
@@ -115,6 +113,7 @@ export class TagsView extends ViewBase<'tags', TagsViewNode, TagsViewConfig> {
 				},
 				this,
 			),
+			registerViewCommand(this.getQualifiedCommand('filterRepositories'), () => this.filterRepositories(), this),
 			registerViewCommand(this.getQualifiedCommand('setLayoutToList'), () => this.setLayout('list'), this),
 			registerViewCommand(this.getQualifiedCommand('setLayoutToTree'), () => this.setLayout('tree'), this),
 			registerViewCommand(this.getQualifiedCommand('setSortByDate'), () => this.setSortByDate(), this),

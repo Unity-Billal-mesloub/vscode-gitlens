@@ -30,8 +30,8 @@ type FlattenSpread<T extends object, P extends string | undefined> =
 	T extends ReadonlyArray<any>
 		? FlattenArray<T, P>
 		: {
-				[K in keyof T & string]: T[K] extends Primitive
-					? { [Key in AddPrefix<P, K>]: T[K] }
+				[K in keyof T & string]: NonNullable<T[K]> extends Primitive
+					? { [Key in AddPrefix<P, K>]: NonNullable<T[K]> }
 					: T[K] extends ReadonlyArray<any>
 						? FlattenArray<T[K], AddPrefix<P, K>>
 						: T[K] extends object
@@ -40,8 +40,8 @@ type FlattenSpread<T extends object, P extends string | undefined> =
 			}[keyof T & string];
 
 type FlattenJoin<T extends object, P extends string | undefined> = {
-	[K in keyof T & string]: T[K] extends Primitive
-		? { [Key in AddPrefix<P, K>]: T[K] }
+	[K in keyof T & string]: NonNullable<T[K]> extends Primitive
+		? { [Key in AddPrefix<P, K>]: NonNullable<T[K]> }
 		: T[K] extends ReadonlyArray<any>
 			? { [Key in AddPrefix<P, K>]: string }
 			: T[K] extends object
@@ -179,9 +179,7 @@ export function updateRecordValue<T>(
 	key: string,
 	value: T | undefined,
 ): Record<string, T> {
-	if (o == null) {
-		o = Object.create(null) as Record<string, T>;
-	}
+	o ??= Object.create(null) as Record<string, T>;
 
 	if (value != null && (typeof value !== 'boolean' || value)) {
 		if (typeof value === 'object') {

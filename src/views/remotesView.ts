@@ -8,7 +8,6 @@ import { isCommit } from '../git/models/commit.js';
 import type { GitBranchReference, GitRevisionReference } from '../git/models/reference.js';
 import type { GitRemote } from '../git/models/remote.js';
 import type { RepositoryChangeEvent } from '../git/models/repository.js';
-import { RepositoryChange, RepositoryChangeComparisonMode } from '../git/models/repository.js';
 import { getRemoteNameFromBranchName } from '../git/utils/branch.utils.js';
 import { getReferenceLabel } from '../git/utils/reference.utils.js';
 import { executeCommand } from '../system/-webview/command.js';
@@ -30,21 +29,13 @@ import { registerViewCommand } from './viewCommands.js';
 
 export class RemotesRepositoryNode extends RepositoryFolderNode<RemotesView, RemotesNode> {
 	async getChildren(): Promise<ViewNode[]> {
-		if (this.child == null) {
-			this.child = new RemotesNode(this.uri, this.view, this, this.repo);
-		}
+		this.child ??= new RemotesNode(this.uri, this.view, this, this.repo);
 
 		return this.child.getChildren();
 	}
 
 	protected changed(e: RepositoryChangeEvent): boolean {
-		return e.changed(
-			RepositoryChange.Config,
-			RepositoryChange.Remotes,
-			RepositoryChange.RemoteProviders,
-			RepositoryChange.Unknown,
-			RepositoryChangeComparisonMode.Any,
-		);
+		return e.changed('config', 'remotes', 'remoteProviders', 'unknown');
 	}
 }
 
@@ -58,14 +49,18 @@ export class RemotesViewNode extends RepositoriesSubscribeableNode<RemotesView, 
 				await this.view.container.git.isDiscoveringRepositories;
 			}
 
-			const repositories = await this.view.getFilteredRepositories();
+			const repositories = this.view.getFilteredRepositories();
 			if (!repositories.length) {
 				this.view.message = 'No remotes could be found.';
 				return [];
 			}
 
+			const repo = this.view.container.git.getBestRepositoryOrFirst();
 			this.children = repositories.map(
-				r => new RemotesRepositoryNode(GitUri.fromRepoPath(r.path), this.view, this, r),
+				r =>
+					new RemotesRepositoryNode(GitUri.fromRepoPath(r.path), this.view, this, r, {
+						expand: r === repo,
+					}),
 			);
 		}
 
@@ -128,6 +123,7 @@ export class RemotesView extends ViewBase<'remotes', RemotesViewNode, RemotesVie
 				},
 				this,
 			),
+			registerViewCommand(this.getQualifiedCommand('filterRepositories'), () => this.filterRepositories(), this),
 			registerViewCommand(this.getQualifiedCommand('setLayoutToList'), () => this.setLayout('list'), this),
 			registerViewCommand(this.getQualifiedCommand('setLayoutToTree'), () => this.setLayout('tree'), this),
 			registerViewCommand(this.getQualifiedCommand('setSortByDate'), () => this.setSortByDate(), this),

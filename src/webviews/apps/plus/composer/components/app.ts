@@ -389,8 +389,7 @@ export class ComposerApp extends LitElement {
 	@state()
 	private selectedHunkIds: Set<string> = new Set();
 
-	@state()
-	private customInstructions: string = '';
+	private initialCustomInstructions: string = '';
 
 	@state()
 	private compositionSummarySelected: boolean = false;
@@ -424,6 +423,10 @@ export class ComposerApp extends LitElement {
 		this.initializeResetStateIfNeeded();
 		if (!this.state.onboardingDismissed && !this.hasAnyError()) {
 			this.openOnboarding();
+		}
+		// Initialize custom instructions from state if provided
+		if (this.state.autoComposeInstructions) {
+			this.initialCustomInstructions = this.state.autoComposeInstructions;
 		}
 	}
 
@@ -511,7 +514,7 @@ export class ComposerApp extends LitElement {
 						this.isDragging = true;
 						const draggedHunkId = evt.item.dataset.hunkId;
 						if (draggedHunkId && this.selectedHunkIds.has(draggedHunkId) && this.selectedHunkIds.size > 1) {
-							evt.item.dataset.multiDragHunkIds = Array.from(this.selectedHunkIds).join(',');
+							evt.item.dataset.multiDragHunkIds = [...this.selectedHunkIds].join(',');
 						}
 						this.startAutoScroll();
 					},
@@ -959,7 +962,7 @@ export class ComposerApp extends LitElement {
 			if (this.selectedHunkIds.size > 1) {
 				this.selectedHunkId = null;
 			} else if (this.selectedHunkIds.size === 1) {
-				this.selectedHunkId = Array.from(this.selectedHunkIds)[0];
+				this.selectedHunkId = [...this.selectedHunkIds][0];
 				this.selectedHunkIds = new Set(); // Clear multi-selection when back to single
 			} else {
 				this.selectedHunkId = null;
@@ -1018,7 +1021,7 @@ export class ComposerApp extends LitElement {
 				if (this.selectedCommitIds.size > 1) {
 					this.selectedCommitId = null;
 				} else if (this.selectedCommitIds.size === 1) {
-					this.selectedCommitId = Array.from(this.selectedCommitIds)[0];
+					this.selectedCommitId = [...this.selectedCommitIds][0];
 					this.selectedCommitIds = new Set();
 				} else {
 					this.selectedCommitId = null;
@@ -1198,12 +1201,22 @@ export class ComposerApp extends LitElement {
 		window.close();
 	}
 
+	private _hunksWithAssignmentsCache?: { hunks: ComposerHunk[]; commits: ComposerCommit[]; result: ComposerHunk[] };
+
 	private get hunksWithAssignments(): ComposerHunk[] {
 		if (!this.state?.hunks || !this.state?.commits) {
 			return [];
 		}
 
-		return updateHunkAssignments(this.state.hunks, this.state.commits);
+		const { hunks, commits } = this.state;
+		const cached = this._hunksWithAssignmentsCache;
+		if (cached?.hunks === hunks && cached?.commits === commits) {
+			return cached.result;
+		}
+
+		const result = updateHunkAssignments(hunks, commits);
+		this._hunksWithAssignmentsCache = { hunks: hunks, commits: commits, result: result };
+		return result;
 	}
 
 	private get aiEnabled(): boolean {
@@ -1387,8 +1400,6 @@ export class ComposerApp extends LitElement {
 	}
 
 	private handleGenerateCommitsWithAI(e: CustomEvent) {
-		this.customInstructions = e.detail?.customInstructions ?? '';
-
 		// Reset feedback state and create new session ID for new composition
 		this.compositionFeedback = null;
 		this.compositionSessionId = `composer-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
@@ -1505,10 +1516,6 @@ export class ComposerApp extends LitElement {
 		this._ipc.sendCommand(AIFeedbackUnhelpfulCommand, { sessionId: sessionId });
 	}
 
-	private handleCustomInstructionsChange(e: CustomEvent) {
-		this.customInstructions = e.detail?.customInstructions ?? '';
-	}
-
 	@query('gl-details-panel')
 	private detailsPanel!: DetailsPanel;
 
@@ -1516,14 +1523,10 @@ export class ComposerApp extends LitElement {
 		const { commitId, checkValidity } = e.detail;
 		if (!commitId) return;
 
-		// Select the commit first
+		// Select the commit first — create a new Set so Lit detects the change
 		this.selectedCommitId = commitId;
-		this.selectedCommitIds.clear();
-		this.selectedCommitIds.add(commitId);
+		this.selectedCommitIds = new Set([commitId]);
 		this.selectedUnassignedSection = null;
-
-		// Focus the commit message input in the details panel
-		this.requestUpdate();
 
 		// Use a small delay to ensure the details panel has rendered and focus the input
 		setTimeout(() => {
@@ -1643,9 +1646,9 @@ export class ComposerApp extends LitElement {
 		if (this.selectedCommitId && !this.selectedUnassignedSection) {
 			selectedCommitIds.add(this.selectedCommitId);
 		}
-		const selectedCommits = Array.from(selectedCommitIds)
-			.map(id => this.state.commits.find(c => c.id === id))
-			.filter(Boolean) as ComposerCommit[];
+		const selectedCommits = Array.from(selectedCommitIds, id => this.state.commits.find(c => c.id === id)).filter(
+			Boolean,
+		) as ComposerCommit[];
 
 		// Get hunks with updated assignments
 		const hunks = this.hunksWithAssignments;
@@ -1700,7 +1703,7 @@ export class ComposerApp extends LitElement {
 					.isPreviewMode=${this.isPreviewMode}
 					.baseCommit=${this.state.baseCommit}
 					.repoName=${this.state.baseCommit?.repoName ?? this.state.repositoryState?.current.name ?? null}
-					.customInstructions=${this.customInstructions}
+					.initialCustomInstructions=${this.initialCustomInstructions}
 					.hasUsedAutoCompose=${this.state.hasUsedAutoCompose}
 					.hasChanges=${this.state.hasChanges}
 					.aiModel=${this.state.ai?.model}
@@ -1714,7 +1717,6 @@ export class ComposerApp extends LitElement {
 					@combine-commits=${this.combineSelectedCommits}
 					@finish-and-commit=${this.finishAndCommit}
 					@generate-commits-with-ai=${this.handleGenerateCommitsWithAI}
-					@custom-instructions-change=${this.handleCustomInstructionsChange}
 					@focus-commit-message=${this.handleFocusCommitMessage}
 					@commit-reorder=${(e: CustomEvent) => this.reorderCommits(e.detail.oldIndex, e.detail.newIndex)}
 					@create-new-commit=${(e: CustomEvent) => this.createNewCommitWithHunks(e.detail.hunkIds)}

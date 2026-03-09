@@ -3,8 +3,8 @@ import type { Container } from '../container.js';
 import { showModePicker } from '../quickpicks/modePicker.js';
 import { command } from '../system/-webview/command.js';
 import { configuration } from '../system/-webview/configuration.js';
-import { log } from '../system/decorators/log.js';
-import { getLogScope, setLogScopeExit } from '../system/logger.scope.js';
+import { debug } from '../system/decorators/log.js';
+import { getScopedLogger } from '../system/logger.scope.js';
 import { GlCommandBase } from './commandBase.js';
 
 @command()
@@ -13,14 +13,14 @@ export class SwitchModeCommand extends GlCommandBase {
 		super('gitlens.switchMode');
 	}
 
-	@log({ args: false, scoped: true, singleLine: true, timed: false })
+	@debug({ args: false, onlyExit: true, timing: false })
 	async execute(): Promise<void> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const pick = await showModePicker();
 		if (pick === undefined) return;
 
-		setLogScopeExit(scope, ` \u2022 mode=${pick.key ?? ''}`);
+		scope?.addExitInfo(`mode=${pick.key ?? ''}`);
 
 		const active = configuration.get('mode.active');
 		if (active === pick.key) return;
@@ -47,7 +47,7 @@ export class ToggleReviewModeCommand extends GlCommandBase {
 		super('gitlens.toggleReviewMode');
 	}
 
-	@log({ args: false, singleLine: true, timed: false })
+	@debug({ args: false, onlyExit: true, timing: false })
 	async execute(): Promise<void> {
 		const modes = configuration.get('modes');
 		if (modes == null || !Object.keys(modes).includes('review')) return;
@@ -63,7 +63,7 @@ export class ToggleZenModeCommand extends GlCommandBase {
 		super('gitlens.toggleZenMode');
 	}
 
-	@log({ args: false, singleLine: true, timed: false })
+	@debug({ args: false, onlyExit: true, timing: false })
 	async execute(): Promise<void> {
 		const modes = configuration.get('modes');
 		if (modes == null || !Object.keys(modes).includes('zen')) return;

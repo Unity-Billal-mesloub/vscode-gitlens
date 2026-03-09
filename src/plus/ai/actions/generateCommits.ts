@@ -1,4 +1,5 @@
 import type { CancellationToken, ProgressOptions } from 'vscode';
+import { md5 } from '@env/crypto.js';
 import type { Source } from '../../../constants.telemetry.js';
 import { CancellationError } from '../../../errors.js';
 import { configuration } from '../../../system/-webview/configuration.js';
@@ -20,6 +21,7 @@ export type GenerateCommitsOptions = {
 	progress?: ProgressOptions;
 	customInstructions?: string;
 	conversation?: AIConversation;
+	suppressLargePromptWarning?: boolean;
 };
 
 /**
@@ -46,6 +48,7 @@ export async function generateCommits(
 		source: string;
 	}[],
 	existingCommits: { id: string; message: string; aiExplanation?: string; hunkIndices: number[] }[],
+	commitMessages: string[],
 	hunkMap: { index: number; hunkHeader: string }[],
 	source: Source,
 	options?: GenerateCommitsOptions,
@@ -62,6 +65,7 @@ export async function generateCommits(
 				if (conversation.isEmpty) {
 					const hunksJson = JSON.stringify(hunks);
 					const existingCommitsJson = JSON.stringify(existingCommits);
+					const commitMessagesJson = JSON.stringify(commitMessages);
 					const hunkMapJson = JSON.stringify(hunkMap);
 
 					const customInstructionParts: string[] = [];
@@ -97,18 +101,41 @@ export async function generateCommits(
 					const customInstructions =
 						customInstructionParts.length > 0 ? customInstructionParts.join('\n\n') : undefined;
 
+					// Report diff and custom instruction details for telemetry
+					reporting['diff.files.count'] = new Set(hunks.map(h => h.fileName)).size;
+					reporting['diff.hunks.count'] = hunks.length;
+					reporting['diff.lines.count'] = hunks.reduce(
+						(total, h) =>
+							total + h.content.split('\n').filter(l => l.startsWith('+') || l.startsWith('-')).length,
+						0,
+					);
+					reporting['diff.hash'] = md5(hunks.map(h => h.content).join('\n'));
+
+					reporting['customInstructions.commitMessage.setting.used'] = Boolean(
+						generateCommitMessageCustomInstructions,
+					);
+					reporting['customInstructions.commitMessage.setting.length'] =
+						generateCommitMessageCustomInstructions?.length ?? 0;
+					reporting['customInstructions.setting.used'] = Boolean(generateCommitsCustomInstructions);
+					reporting['customInstructions.setting.length'] = generateCommitsCustomInstructions?.length ?? 0;
+					reporting['customInstructions.used'] = Boolean(options?.customInstructions);
+					reporting['customInstructions.length'] = options?.customInstructions?.length ?? 0;
+
 					const { prompt } = await service.getPrompt(
 						'generate-commits',
 						model,
 						{
 							hunks: hunksJson,
 							existingCommits: existingCommitsJson,
+							commitMessages: commitMessagesJson,
 							hunkMap: hunkMapJson,
 							instructions: customInstructions,
 						},
 						maxInputTokens,
 						retries,
 						reporting,
+						undefined,
+						options?.suppressLargePromptWarning ? { suppressLargePromptWarning: true } : undefined,
 					);
 
 					conversation.addMessage({ role: 'user', content: prompt });
@@ -241,9 +268,9 @@ function validateCommitsResponse(
 		const inputHunkIndices = new Set(inputHunks.map(h => h.index));
 		const previouslyAssignedHunkIndices = new Set(existingCommits.flatMap(c => c.hunkIndices));
 		const unassignedHunkIndices = new Set([...inputHunkIndices].filter(i => !previouslyAssignedHunkIndices.has(i)));
-		const illegallyAssignedHunkIndices = Array.from(usedHunkIndices).filter(i => !inputHunkIndices.has(i));
-		const missingHunkIndices = Array.from(unassignedHunkIndices).filter(i => !usedHunkIndices.has(i));
-		const extraHunkIndices = Array.from(usedHunkIndices).filter(index => !inputHunkIndices.has(index));
+		const illegallyAssignedHunkIndices = [...usedHunkIndices].filter(i => !inputHunkIndices.has(i));
+		const missingHunkIndices = [...unassignedHunkIndices].filter(i => !usedHunkIndices.has(i));
+		const extraHunkIndices = [...usedHunkIndices].filter(index => !inputHunkIndices.has(index));
 
 		// Check for missing hunks
 		if (missingHunkIndices.length > 0) {

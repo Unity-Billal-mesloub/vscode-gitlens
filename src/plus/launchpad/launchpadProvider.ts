@@ -19,6 +19,7 @@ import type { GitRemote } from '../../git/models/remote.js';
 import type { ProviderReference } from '../../git/models/remoteProvider.js';
 import type { Repository } from '../../git/models/repository.js';
 import type { RepositoryDescriptor } from '../../git/models/resourceDescriptor.js';
+import { gitSuffixRegex } from '../../git/parsers/remoteParser.js';
 import { getOrOpenPullRequestRepository } from '../../git/utils/-webview/pullRequest.utils.js';
 import type { PullRequestUrlIdentity } from '../../git/utils/pullRequest.utils.js';
 import {
@@ -33,10 +34,10 @@ import { configuration } from '../../system/-webview/configuration.js';
 import { setContext } from '../../system/-webview/context.js';
 import { openUrl } from '../../system/-webview/vscode/uris.js';
 import { gate } from '../../system/decorators/gate.js';
-import { debug, log } from '../../system/decorators/log.js';
+import { debug, trace } from '../../system/decorators/log.js';
 import { filterMap, groupByMap, map, some } from '../../system/iterable.js';
 import { Logger } from '../../system/logger.js';
-import { getLogScope } from '../../system/logger.scope.js';
+import { getScopedLogger } from '../../system/logger.scope.js';
 import type { TimedResult } from '../../system/promise.js';
 import { getSettledValue, timedWithSlowThreshold } from '../../system/promise.js';
 import type { UriTypes } from '../../uris/deepLinks/deepLink.js';
@@ -190,7 +191,7 @@ export class LaunchpadProvider implements Disposable {
 	}
 
 	private _prs: CachedLaunchpadPromise<PullRequestsWithSuggestionCounts> | undefined;
-	@debug<LaunchpadProvider['getPullRequestsWithSuggestionCounts']>({ args: { 0: o => `force=${o?.force}` } })
+	@trace({ args: options => ({ options: `force=${options?.force}` }) })
 	private async getPullRequestsWithSuggestionCounts(options?: { cancellation?: CancellationToken; force?: boolean }) {
 		if (options?.force || this._prs == null || this._prs.expiresAt < Date.now()) {
 			this._prs = {
@@ -202,9 +203,9 @@ export class LaunchpadProvider implements Disposable {
 		return this._prs?.promise;
 	}
 
-	@debug<LaunchpadProvider['fetchPullRequestsWithSuggestionCounts']>({ args: false })
+	@trace({ args: false })
 	private async fetchPullRequestsWithSuggestionCounts(cancellation?: CancellationToken) {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const [prsResult, subscriptionResult] = await Promise.allSettled([
 			withDurationAndSlowEventOnTimeout(
@@ -216,13 +217,13 @@ export class LaunchpadProvider implements Disposable {
 		]);
 
 		if (prsResult.status === 'rejected') {
-			Logger.error(prsResult.reason, scope, 'Failed to get pull requests');
+			scope?.error(prsResult.reason, 'Failed to get pull requests');
 			throw prsResult.reason;
 		}
 
 		const prs = getSettledValue(prsResult)?.value;
 		if (prs?.error != null) {
-			Logger.error(prs.error, scope, 'Failed to get pull requests');
+			scope?.error(prs.error, 'Failed to get pull requests');
 			throw prs.error;
 		}
 
@@ -239,7 +240,7 @@ export class LaunchpadProvider implements Disposable {
 					this.container,
 				);
 			} catch (ex) {
-				Logger.error(ex, scope, 'Failed to get code suggestion counts');
+				scope?.error(ex, 'Failed to get code suggestion counts');
 			}
 		}
 
@@ -322,7 +323,7 @@ export class LaunchpadProvider implements Disposable {
 	}
 
 	private _enrichedItems: CachedLaunchpadPromise<TimedResult<EnrichedItem[]>> | undefined;
-	@debug<LaunchpadProvider['getEnrichedItems']>({ args: { 0: o => `force=${o?.force}` } })
+	@trace({ args: options => ({ options: `force=${options?.force}` }) })
 	private async getEnrichedItems(options?: { cancellation?: CancellationToken; force?: boolean }) {
 		if (options?.force || this._enrichedItems == null || this._enrichedItems.expiresAt < Date.now()) {
 			this._enrichedItems = {
@@ -339,8 +340,11 @@ export class LaunchpadProvider implements Disposable {
 	}
 
 	private _codeSuggestions: Map<string, CachedLaunchpadPromise<TimedResult<Draft[]>>> | undefined;
-	@debug<LaunchpadProvider['getCodeSuggestions']>({
-		args: { 0: i => `${i.id} (${i.provider.name} ${i.type})`, 1: o => `force=${o?.force}` },
+	@trace({
+		args: (item, options) => ({
+			item: `${item.id} (${item.provider.name} ${item.type})`,
+			options: `force=${options?.force}`,
+		}),
 	})
 	private async getCodeSuggestions(item: LaunchpadItem, options?: { force?: boolean }) {
 		if (item.codeSuggestionsCount < 1) return undefined;
@@ -374,7 +378,7 @@ export class LaunchpadProvider implements Disposable {
 		return this._codeSuggestions.get(item.uuid)!.promise;
 	}
 
-	@log()
+	@debug()
 	refresh(): void {
 		this._prs = undefined;
 		this._enrichedItems = undefined;
@@ -383,7 +387,7 @@ export class LaunchpadProvider implements Disposable {
 		this._onDidChange.fire();
 	}
 
-	@log<LaunchpadProvider['pin']>({ args: { 0: i => `${i.id} (${i.provider.name} ${i.type})` } })
+	@debug({ args: item => ({ item: `${item.id} (${item.provider.name} ${item.type})` }) })
 	async pin(item: LaunchpadItem): Promise<void> {
 		item.viewer.pinned = true;
 		this._onDidChange.fire();
@@ -393,7 +397,7 @@ export class LaunchpadProvider implements Disposable {
 		this._onDidChange.fire();
 	}
 
-	@log<LaunchpadProvider['unpin']>({ args: { 0: i => `${i.id} (${i.provider.name} ${i.type})` } })
+	@debug({ args: item => ({ item: `${item.id} (${item.provider.name} ${item.type})` }) })
 	async unpin(item: LaunchpadItem): Promise<void> {
 		item.viewer.pinned = false;
 		this._onDidChange.fire();
@@ -406,7 +410,7 @@ export class LaunchpadProvider implements Disposable {
 		this._onDidChange.fire();
 	}
 
-	@log<LaunchpadProvider['snooze']>({ args: { 0: i => `${i.id} (${i.provider.name} ${i.type})` } })
+	@debug({ args: item => ({ item: `${item.id} (${item.provider.name} ${item.type})` }) })
 	async snooze(item: LaunchpadItem): Promise<void> {
 		item.viewer.snoozed = true;
 		this._onDidChange.fire();
@@ -416,7 +420,7 @@ export class LaunchpadProvider implements Disposable {
 		this._onDidChange.fire();
 	}
 
-	@log<LaunchpadProvider['unsnooze']>({ args: { 0: i => `${i.id} (${i.provider.name} ${i.type})` } })
+	@debug({ args: item => ({ item: `${item.id} (${item.provider.name} ${item.type})` }) })
 	async unsnooze(item: LaunchpadItem): Promise<void> {
 		item.viewer.snoozed = false;
 		this._onDidChange.fire();
@@ -429,7 +433,7 @@ export class LaunchpadProvider implements Disposable {
 		this._onDidChange.fire();
 	}
 
-	@log<LaunchpadProvider['merge']>({ args: { 0: i => `${i.id} (${i.provider.name} ${i.type})` } })
+	@debug({ args: item => ({ item: `${item.id} (${item.provider.name} ${item.type})` }) })
 	async merge(item: LaunchpadItem): Promise<void> {
 		if (item.headRef?.oid == null) return;
 		const integrationId = item.provider.id;
@@ -447,14 +451,14 @@ export class LaunchpadProvider implements Disposable {
 		this.refresh();
 	}
 
-	@log<LaunchpadProvider['open']>({ args: { 0: i => `${i.id} (${i.provider.name} ${i.type})` } })
+	@debug({ args: item => ({ item: `${item.id} (${item.provider.name} ${item.type})` }) })
 	open(item: LaunchpadItem): void {
 		if (item.url == null) return;
 		void openUrl(item.url);
 		this._prs = undefined;
 	}
 
-	@log<LaunchpadProvider['openCodeSuggestion']>({ args: { 0: i => `${i.id} (${i.provider.name} ${i.type})` } })
+	@debug({ args: item => ({ item: `${item.id} (${item.provider.name} ${item.type})` }) })
 	openCodeSuggestion(item: LaunchpadItem, target: string): void {
 		const draft = item.codeSuggestions?.value?.find(d => d.id === target);
 		if (draft == null) return;
@@ -466,12 +470,12 @@ export class LaunchpadProvider implements Disposable {
 		});
 	}
 
-	@log()
-	openCodeSuggestionInBrowser(target: string): void {
-		void openUrl(this.container.drafts.generateWebUrl(target));
+	@debug()
+	async openCodeSuggestionInBrowser(target: string): Promise<void> {
+		void openUrl(await this.container.drafts.generateWebUrl(target));
 	}
 
-	@log<LaunchpadProvider['switchTo']>({ args: { 0: i => `${i.id} (${i.provider.name} ${i.type})` } })
+	@debug({ args: item => ({ item: `${item.id} (${item.provider.name} ${item.type})` }) })
 	async switchTo(
 		item: LaunchpadItem,
 		options?: { openInWorktree?: boolean; startCodeSuggestion?: boolean },
@@ -505,7 +509,7 @@ export class LaunchpadProvider implements Disposable {
 		await this.container.deepLinks.processDeepLinkUri(deepLinkUrl, false, prRepo);
 	}
 
-	@log<LaunchpadProvider['openChanges']>({ args: { 0: i => `${i.id} (${i.provider.name} ${i.type})` } })
+	@debug({ args: item => ({ item: `${item.id} (${item.provider.name} ${item.type})` }) })
 	async openChanges(item: LaunchpadItem): Promise<void> {
 		if (!item.openRepository?.localBranch?.current) return;
 
@@ -524,7 +528,7 @@ export class LaunchpadProvider implements Disposable {
 		}
 	}
 
-	@log<LaunchpadProvider['openInGraph']>({ args: { 0: i => `${i.id} (${i.provider.name} ${i.type})` } })
+	@debug({ args: item => ({ item: `${item.id} (${item.provider.name} ${item.type})` }) })
 	async openInGraph(item: LaunchpadItem): Promise<void> {
 		const deepLinkUrl = this.getItemBranchDeepLink(item);
 		if (deepLinkUrl == null) return;
@@ -532,7 +536,7 @@ export class LaunchpadProvider implements Disposable {
 		await this.container.deepLinks.processDeepLinkUri(deepLinkUrl, false);
 	}
 
-	generateWebUrl(): string {
+	generateWebUrl(): Promise<string> {
 		return this.container.urls.getGkDevUrl('launchpad');
 	}
 
@@ -584,7 +588,7 @@ export class LaunchpadProvider implements Disposable {
 		const uniqueRemoteUrls = new Set<string>();
 		for (const item of actionableItems) {
 			if (item.repoIdentity.remote.url != null) {
-				uniqueRemoteUrls.add(item.repoIdentity.remote.url.replace(/\.git$/, ''));
+				uniqueRemoteUrls.add(item.repoIdentity.remote.url.replace(gitSuffixRegex, ''));
 			}
 		}
 
@@ -599,7 +603,7 @@ export class LaunchpadProvider implements Disposable {
 			for (const remote of remotes) {
 				if (uniqueRemoteUrls.size === 0) return;
 
-				const remoteUrl = remote.url.replace(/\.git$/, '');
+				const remoteUrl = remote.url.replace(gitSuffixRegex, '');
 				if (uniqueRemoteUrls.has(remoteUrl)) {
 					repoRemotes.set(remoteUrl, [repo, remote]);
 					uniqueRemoteUrls.delete(remoteUrl);
@@ -655,12 +659,12 @@ export class LaunchpadProvider implements Disposable {
 				o?.search != null && typeof o.search !== 'string' ? o.search.map(pr => pr.url).join(',') : o?.search
 			}${getCancellationTokenId(c)}`,
 	)
-	@log<LaunchpadProvider['getCategorizedItems']>({ args: { 0: o => `force=${o?.force}`, 1: false } })
+	@debug({ args: options => ({ options: `force=${options?.force}` }) })
 	async getCategorizedItems(
 		options?: { force?: boolean; search?: string | PullRequest[] },
 		cancellation?: CancellationToken,
 	): Promise<LaunchpadCategorizedResult> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const isSearching = ((o): o is RequireSome<NonNullable<typeof options>, 'search'> => Boolean(o?.search))(
 			options,
@@ -697,7 +701,7 @@ export class LaunchpadProvider implements Disposable {
 			if (cancellation?.isCancellationRequested) throw new CancellationError();
 
 			if (prsWithCountsResult.status === 'rejected') {
-				Logger.error(prsWithCountsResult.reason, scope, 'Failed to get pull requests with suggestion counts');
+				scope?.error(prsWithCountsResult.reason, 'Failed to get pull requests with suggestion counts');
 				result = {
 					error:
 						prsWithCountsResult.reason instanceof Error
@@ -950,8 +954,11 @@ export class LaunchpadProvider implements Disposable {
 		return connected;
 	}
 
-	@log<LaunchpadProvider['ensureLaunchpadItemCodeSuggestions']>({
-		args: { 0: i => `${i.id} (${i.provider.name} ${i.type})`, 1: o => `force=${o?.force}` },
+	@debug({
+		args: (item, options) => ({
+			item: `${item.id} (${item.provider.name} ${item.type})`,
+			options: `force=${options?.force}`,
+		}),
 	})
 	async ensureLaunchpadItemCodeSuggestions(
 		item: LaunchpadItem,

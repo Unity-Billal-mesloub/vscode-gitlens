@@ -12,6 +12,8 @@ export type GitFeatures =
 	| 'git:merge-tree:write-tree'
 	| 'git:push:force-if-includes'
 	| 'git:rev-parse:end-of-options'
+	| 'git:signing:ssh'
+	| 'git:signing:x509'
 	| 'git:stash:push:pathspecs'
 	| 'git:stash:push:staged'
 	| 'git:stash:push:stdin'
@@ -38,6 +40,8 @@ export const gitFeaturesByVersion = new Map<GitFeatures, string>([
 	['git:merge-tree:write-tree', '2.38'],
 	['git:push:force-if-includes', '2.30.0'],
 	['git:rev-parse:end-of-options', '2.30'],
+	['git:signing:ssh', '2.34.0'],
+	['git:signing:x509', '2.19.0'],
 	['git:stash:push:pathspecs', '2.13.2'],
 	['git:stash:push:staged', '2.35.0'],
 	['git:stash:push:stdin', '2.30.0'],
@@ -79,6 +83,7 @@ export type ProFeatures =
 	| 'worktrees'
 	| 'graph'
 	| 'launchpad'
+	| 'startReview'
 	| 'startWork'
 	| 'associateIssueWithBranch'
 	| ProAIFeatures;
@@ -114,6 +119,7 @@ export function isAdvancedFeature(feature: PlusFeatures): feature is AdvancedFea
 export function isProFeatureOnAllRepos(feature: PlusFeatures): feature is ProFeatures {
 	switch (feature) {
 		case 'launchpad':
+		case 'startReview':
 		case 'startWork':
 		case 'associateIssueWithBranch':
 		case 'explain-changes':
@@ -155,7 +161,7 @@ export function getFeaturePreviewStatus(preview: FeaturePreview): FeaturePreview
 	const usages = preview?.usages;
 	if (!usages?.length) return 'eligible';
 
-	const remainingHours = (new Date(usages[usages.length - 1].expiresOn).getTime() - Date.now()) / hoursInMs;
+	const remainingHours = (new Date(usages.at(-1)!.expiresOn).getTime() - Date.now()) / hoursInMs;
 
 	if (
 		usages.length <= proFeaturePreviewUsages &&

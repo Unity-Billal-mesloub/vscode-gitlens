@@ -7,7 +7,6 @@ import type {
 	RepositoryChangeEvent,
 	RepositoryFileSystemChangeEvent,
 } from '../../git/models/repository.js';
-import { RepositoryChange, RepositoryChangeComparisonMode } from '../../git/models/repository.js';
 import type { GitStatus } from '../../git/models/status.js';
 import { getRepositoryStatusIconPath } from '../../git/utils/-webview/icons.js';
 import { formatLastFetched } from '../../git/utils/-webview/repository.utils.js';
@@ -23,7 +22,7 @@ import type {
 } from '../../plus/workspaces/models/localWorkspace.js';
 import { findLastIndex } from '../../system/array.js';
 import { gate } from '../../system/decorators/gate.js';
-import { debug, log } from '../../system/decorators/log.js';
+import { debug, trace } from '../../system/decorators/log.js';
 import { weakEvent } from '../../system/event.js';
 import { disposableInterval } from '../../system/function.js';
 import { join, map, slice } from '../../system/iterable.js';
@@ -325,23 +324,23 @@ export class RepositoryNode extends SubscribeableViewNode<'repository', ViewsWit
 		return item;
 	}
 
-	@log()
+	@debug()
 	fetch(options: { all?: boolean; progress?: boolean; prune?: boolean; remote?: string }): Promise<void> {
 		return this.repo.fetch(options);
 	}
 
-	@log()
+	@debug()
 	pull(options: { progress?: boolean; rebase?: boolean }): Promise<void> {
 		return this.repo.pull(options);
 	}
 
-	@log()
+	@debug()
 	push(options: { force?: boolean; progress?: boolean }): Promise<void> {
 		return this.repo.push(options);
 	}
 
 	@gate()
-	@debug()
+	@trace()
 	override async refresh(reset?: boolean): Promise<void | { cancel: boolean }> {
 		await super.refresh(reset);
 
@@ -352,19 +351,19 @@ export class RepositoryNode extends SubscribeableViewNode<'repository', ViewsWit
 		await this.ensureSubscription();
 	}
 
-	@log()
+	@debug()
 	async star(): Promise<void> {
 		await this.repo.star();
 		void this.parent!.triggerChange();
 	}
 
-	@log()
+	@debug()
 	async unstar(): Promise<void> {
 		await this.repo.unstar();
 		void this.parent!.triggerChange();
 	}
 
-	@debug()
+	@trace()
 	protected async subscribe(): Promise<Disposable> {
 		const lastFetched = (await this.repo?.getLastFetched()) ?? 0;
 
@@ -374,9 +373,13 @@ export class RepositoryNode extends SubscribeableViewNode<'repository', ViewsWit
 		if (lastFetched !== 0 && interval > 0) {
 			disposables.push(
 				disposableInterval(() => {
+					// Skip update if view is not visible to reduce unnecessary work
+					if (!this.view.visible) return;
+
 					// Check if the interval should change, and if so, reset it
 					if (interval !== getLastFetchedUpdateInterval(lastFetched)) {
 						void this.resetSubscription();
+						return;
 					}
 
 					if (this.splatted) {
@@ -403,14 +406,13 @@ export class RepositoryNode extends SubscribeableViewNode<'repository', ViewsWit
 		return this.repo.etag;
 	}
 
-	@debug<RepositoryNode['onFileSystemChanged']>({
-		args: {
-			0: e =>
-				`{ repository: ${e.repository.name ?? ''}, uris(${e.uris.size}): [${join(
-					map(slice(e.uris, 0, 1), u => u.fsPath),
-					', ',
-				)}${e.uris.size > 1 ? ', ...' : ''}] }`,
-		},
+	@trace({
+		args: e => ({
+			e: `{ repository: ${e.repository.name ?? ''}, uris(${e.uris.size}): [${join(
+				map(slice(e.uris, 0, 1), u => u.fsPath),
+				', ',
+			)}${e.uris.size > 1 ? ', ...' : ''}] }`,
+		}),
 	})
 	private async onFileSystemChanged(_e: RepositoryFileSystemChangeEvent) {
 		this._status = this.repo.git.status.getStatus();
@@ -437,9 +439,9 @@ export class RepositoryNode extends SubscribeableViewNode<'repository', ViewsWit
 		void this.triggerChange(false);
 	}
 
-	@debug<RepositoryNode['onRepositoryChanged']>({ args: { 0: e => e.toString() } })
+	@trace()
 	private onRepositoryChanged(e: RepositoryChangeEvent) {
-		if (e.changed(RepositoryChange.Closed, RepositoryChangeComparisonMode.Any)) {
+		if (e.changed('closed')) {
 			this.dispose();
 
 			return;
@@ -447,38 +449,28 @@ export class RepositoryNode extends SubscribeableViewNode<'repository', ViewsWit
 
 		if (
 			this.children == null ||
-			e.changed(
-				RepositoryChange.Config,
-				RepositoryChange.Index,
-				RepositoryChange.Heads,
-				RepositoryChange.Opened,
-				RepositoryChange.PausedOperationStatus,
-				RepositoryChange.Starred,
-				RepositoryChange.Worktrees,
-				RepositoryChange.Unknown,
-				RepositoryChangeComparisonMode.Any,
-			)
+			e.changed('config', 'index', 'heads', 'opened', 'pausedOp', 'starred', 'worktrees', 'unknown')
 		) {
 			void this.triggerChange(true);
 
 			return;
 		}
 
-		if (e.changed(RepositoryChange.Remotes, RepositoryChange.RemoteProviders, RepositoryChangeComparisonMode.Any)) {
+		if (e.changed('remotes', 'remoteProviders')) {
 			const node = this.children.find(c => c.type === 'remotes');
 			if (node != null) {
 				this.view.triggerNodeChange(node);
 			}
 		}
 
-		if (e.changed(RepositoryChange.Stash, RepositoryChangeComparisonMode.Any)) {
+		if (e.changed('stash')) {
 			const node = this.children.find(c => c.type === 'stashes');
 			if (node != null) {
 				this.view.triggerNodeChange(node);
 			}
 		}
 
-		if (e.changed(RepositoryChange.Tags, RepositoryChangeComparisonMode.Any)) {
+		if (e.changed('tags')) {
 			const node = this.children.find(c => c.type === 'tags');
 			if (node != null) {
 				this.view.triggerNodeChange(node);

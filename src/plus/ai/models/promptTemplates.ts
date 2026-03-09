@@ -67,8 +67,19 @@ interface StashMessagePromptTemplateContext {
 interface GenerateCommitsPromptTemplateContext {
 	hunks: string;
 	existingCommits: string;
+	commitMessages: string;
 	hunkMap: string;
 	context?: string;
+	instructions?: string;
+}
+
+interface ReviewPullRequestPromptTemplateContext {
+	prData: string;
+	instructions?: string;
+}
+
+interface StartWorkIssuePromptTemplateContext {
+	issue: string;
 	instructions?: string;
 }
 
@@ -79,7 +90,9 @@ export type PromptTemplateType =
 	| `generate-create-${'cloudPatch' | 'codeSuggestion' | 'pullRequest'}`
 	| 'generate-commits'
 	| 'generate-searchQuery'
-	| 'explain-changes';
+	| 'explain-changes'
+	| 'start-review-pullRequest'
+	| 'start-work-issue';
 
 type PromptTemplateVersions = '' | '_v2';
 
@@ -102,4 +115,8 @@ export type PromptTemplateContext<T extends PromptTemplateType> = T extends 'gen
 	? SearchQueryPromptTemplateContext
 	: T extends 'explain-changes'
 	? ExplainChangesPromptTemplateContext
+	: T extends 'start-review-pullRequest'
+	? ReviewPullRequestPromptTemplateContext
+	: T extends 'start-work-issue'
+	? StartWorkIssuePromptTemplateContext
 	: never;

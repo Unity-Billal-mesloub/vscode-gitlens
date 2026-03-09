@@ -41,7 +41,7 @@ import { executeCommand, registerCommand } from '../../../system/-webview/comman
 import { configuration } from '../../../system/-webview/configuration.js';
 import { getContext, onDidChangeContext, setContext } from '../../../system/-webview/context.js';
 import { gate } from '../../../system/decorators/gate.js';
-import { debug } from '../../../system/decorators/log.js';
+import { trace } from '../../../system/decorators/log.js';
 import type { Deferrable } from '../../../system/function/debounce.js';
 import { debounce } from '../../../system/function/debounce.js';
 import { find, some } from '../../../system/iterable.js';
@@ -509,9 +509,7 @@ export class PatchDetailsWebviewProvider implements WebviewProvider<
 				selection.change = undefined;
 			}
 
-			updatedSelections.push(
-				selection != null ? selection : toDraftUserSelection(member, undefined, 'editor', 'add'),
-			);
+			updatedSelections.push(selection ?? toDraftUserSelection(member, undefined, 'editor', 'add'));
 		}
 
 		if (updatedSelections.length) {
@@ -932,14 +930,12 @@ export class PatchDetailsWebviewProvider implements WebviewProvider<
 			return;
 		}
 
-		if (this._notifyDidChangeStateDebounced == null) {
-			this._notifyDidChangeStateDebounced = debounce(this.notifyDidChangeState.bind(this), 500);
-		}
+		this._notifyDidChangeStateDebounced ??= debounce(this.notifyDidChangeState.bind(this), 500);
 
 		this._notifyDidChangeStateDebounced();
 	}
 
-	@debug({ args: false })
+	@trace({ args: false })
 	protected async getState(current: Context): Promise<Serialized<State>> {
 		let create;
 		if (current.mode === 'create' && current.create != null) {
@@ -1103,7 +1099,7 @@ export class PatchDetailsWebviewProvider implements WebviewProvider<
 	private async updateViewDraftState(draft: LocalDraft | Draft | undefined) {
 		this._context.draft = draft;
 		if (draft?.draftType === 'cloud') {
-			this._context.draftGkDevUrl = this.container.drafts.generateWebUrl(draft);
+			this._context.draftGkDevUrl = await this.container.drafts.generateWebUrl(draft);
 			await this.createDraftUserState(draft, { force: true });
 		}
 		this.setMode('view', true);
@@ -1301,6 +1297,8 @@ export class PatchDetailsWebviewProvider implements WebviewProvider<
 					undefined,
 					undefined,
 					params.staged,
+					undefined,
+					params.mode,
 				),
 				revision,
 			];

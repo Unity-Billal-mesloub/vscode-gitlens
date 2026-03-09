@@ -5,11 +5,10 @@ import type { Container } from '../../../../container.js';
 import type { DisposableTemporaryGitIndex, GitStagingSubProvider } from '../../../../git/gitProvider.js';
 import { splitPath } from '../../../../system/-webview/path.js';
 import { chunk, countStringLength } from '../../../../system/array.js';
-import { log } from '../../../../system/decorators/log.js';
-import { Logger } from '../../../../system/logger.js';
+import { debug } from '../../../../system/decorators/log.js';
+import { getScopedLogger } from '../../../../system/logger.scope.js';
 import { joinPaths } from '../../../../system/path.js';
 import { mixinAsyncDisposable } from '../../../../system/unifiedDisposable.js';
-import { scope } from '../../../../webviews/commitDetails/protocol.js';
 import type { Git } from '../git.js';
 import { maxGitCliLength } from '../git.js';
 import type { LocalGitProviderInternal } from '../localGitProvider.js';
@@ -21,12 +20,14 @@ export class StagingGitSubProvider implements GitStagingSubProvider {
 		private readonly provider: LocalGitProviderInternal,
 	) {}
 
-	@log()
+	@debug()
 	async createTemporaryIndex(
 		repoPath: string,
 		from: 'empty' | 'current' | 'ref',
 		ref?: string,
 	): Promise<DisposableTemporaryGitIndex> {
+		const scope = getScopedLogger();
+
 		// Create a temporary index file
 		const tempDir = await fs.mkdtemp(joinPaths(tmpdir(), 'gl-'));
 		const tempIndex = joinPaths(tempDir, 'index');
@@ -84,7 +85,7 @@ export class StagingGitSubProvider implements GitStagingSubProvider {
 
 			return mixinAsyncDisposable({ path: tempIndex, env: { GIT_INDEX_FILE: tempIndex } }, dispose);
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 			debugger;
 
 			void dispose();
@@ -92,7 +93,7 @@ export class StagingGitSubProvider implements GitStagingSubProvider {
 		}
 	}
 
-	@log()
+	@debug()
 	async stageFile(repoPath: string, pathOrUri: string | Uri): Promise<void> {
 		await this.git.exec(
 			{ cwd: repoPath },
@@ -103,7 +104,7 @@ export class StagingGitSubProvider implements GitStagingSubProvider {
 		);
 	}
 
-	@log()
+	@debug()
 	async stageFiles(
 		repoPath: string,
 		pathOrUri: string[] | Uri[],
@@ -128,7 +129,7 @@ export class StagingGitSubProvider implements GitStagingSubProvider {
 		}
 	}
 
-	@log()
+	@debug()
 	async stageDirectory(repoPath: string, directoryOrUri: string | Uri): Promise<void> {
 		await this.git.exec(
 			{ cwd: repoPath },
@@ -139,12 +140,12 @@ export class StagingGitSubProvider implements GitStagingSubProvider {
 		);
 	}
 
-	@log()
+	@debug()
 	async unstageFile(repoPath: string, pathOrUri: string | Uri): Promise<void> {
 		await this.git.reset(repoPath, [typeof pathOrUri === 'string' ? pathOrUri : splitPath(pathOrUri, repoPath)[0]]);
 	}
 
-	@log()
+	@debug()
 	async unstageFiles(repoPath: string, pathOrUri: string[] | Uri[]): Promise<void> {
 		const pathspecs = pathOrUri.map(p => (typeof p === 'string' ? p : splitPath(p, repoPath)[0]));
 
@@ -159,7 +160,7 @@ export class StagingGitSubProvider implements GitStagingSubProvider {
 		}
 	}
 
-	@log()
+	@debug()
 	async unstageDirectory(repoPath: string, directoryOrUri: string | Uri): Promise<void> {
 		await this.git.reset(repoPath, [
 			typeof directoryOrUri === 'string' ? directoryOrUri : splitPath(directoryOrUri, repoPath)[0],

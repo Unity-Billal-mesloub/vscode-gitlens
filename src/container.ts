@@ -18,7 +18,6 @@ import { CacheProvider } from './cache.js';
 import { GitCodeLensController } from './codelens/codeLensController.js';
 import type { ToggleFileAnnotationCommandArgs } from './commands/toggleFileAnnotations.js';
 import type { DateSource, DateStyle, FileAnnotationType, Mode } from './config.js';
-import { fromOutputLevel } from './config.js';
 import type { GlCommands } from './constants.commands.js';
 import { extensionPrefix } from './constants.js';
 import { MarkdownContentProvider } from './documents/markdown.js';
@@ -56,7 +55,7 @@ import { executeCommand } from './system/-webview/command.js';
 import { configuration } from './system/-webview/configuration.js';
 import { Keyboard } from './system/-webview/keyboard.js';
 import type { Storage } from './system/-webview/storage.js';
-import { log } from './system/decorators/log.js';
+import { debug } from './system/decorators/log.js';
 import { memoize } from './system/decorators/memoize.js';
 import { Logger } from './system/logger.js';
 import { AIFeedbackProvider } from './telemetry/aiFeedbackProvider.js';
@@ -130,6 +129,10 @@ export class Container {
 		}
 
 		return this._onReady.event;
+	}
+
+	toLoggable(): string {
+		return '<container>';
 	}
 
 	readonly BranchDateFormatting = {
@@ -337,7 +340,7 @@ export class Container {
 		queueMicrotask(() => this._onReady.fire());
 	}
 
-	@log()
+	@debug()
 	private async registerGitProviders(): Promise<void> {
 		const providers = await getSupportedGitProviders(this);
 		for (const provider of providers) {
@@ -348,7 +351,7 @@ export class Container {
 		void this._git.registrationComplete();
 	}
 
-	@log()
+	@debug()
 	private async registerMcpProviders(): Promise<void> {
 		const mcpProviders = await getMcpProviders(this);
 		if (mcpProviders != null) {
@@ -360,10 +363,6 @@ export class Container {
 		if (!configuration.changedAny(e, extensionPrefix)) return;
 
 		this._mode = undefined;
-
-		if (configuration.changed(e, 'outputLevel')) {
-			Logger.logLevel = fromOutputLevel(configuration.get('outputLevel'));
-		}
 
 		if (configuration.changed(e, 'defaultGravatarsStyle')) {
 			setDefaultGravatarsStyle(configuration.get('defaultGravatarsStyle'));
@@ -660,9 +659,7 @@ export class Container {
 
 	private _mode: Mode | undefined;
 	get mode(): Mode | undefined {
-		if (this._mode == null) {
-			this._mode = configuration.get('modes')?.[configuration.get('mode.active')];
-		}
+		this._mode ??= configuration.get('modes')?.[configuration.get('mode.active')];
 		return this._mode;
 	}
 

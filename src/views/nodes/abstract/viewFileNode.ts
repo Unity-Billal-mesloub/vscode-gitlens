@@ -4,9 +4,11 @@ import { StatusFileFormatter } from '../../../git/formatters/statusFormatter.js'
 import type { GitUri } from '../../../git/gitUri.js';
 import type { GitFile } from '../../../git/models/file.js';
 import type { GitStatusFile } from '../../../git/models/statusFile.js';
+import { loggable } from '../../../system/decorators/log.js';
 import type { View } from '../../viewBase.js';
 import { ViewNode } from './viewNode.js';
 
+@loggable(i => i.file.path)
 export abstract class ViewFileNode<
 	Type extends TreeViewFileNodeTypes = TreeViewFileNodeTypes,
 	TView extends View = View,
@@ -25,10 +27,6 @@ export abstract class ViewFileNode<
 	get repoPath(): string {
 		return this.uri.repoPath!;
 	}
-
-	override toString(): string {
-		return `${super.toString()}:${this.file.path}`;
-	}
 }
 
 export function getFileTooltip(
@@ -37,11 +35,9 @@ export function getFileTooltip(
 	outputFormat?: 'markdown' | 'plaintext',
 ): string {
 	return StatusFileFormatter.fromTemplate(
-		`\${status${suffix ? `' ${suffix}'` : ''}} $(file) \${filePath}\${  ←  originalPath}\${'\\\n'changesDetail}`,
+		`\${status${suffix ? `' ${suffix}'` : ''}} $(file) \${filePath}${file.submodule != null ? ' (submodule)' : ''}\${  ←  originalPath}\${'\\\n'changesDetail}`,
 		file,
-		{
-			outputFormat: outputFormat ?? 'markdown',
-		},
+		{ outputFormat: outputFormat ?? 'markdown' },
 	);
 }
 

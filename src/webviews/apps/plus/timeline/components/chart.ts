@@ -4,7 +4,7 @@ import { html, LitElement, nothing } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
 import type { ChartInternal, ChartWithInternal } from '../../../../../@types/bb.d.js';
 import { shortenRevision } from '../../../../../git/utils/revision.utils.js';
-import { log } from '../../../../../system/decorators/log.js';
+import { debug } from '../../../../../system/decorators/log.js';
 import { debounce } from '../../../../../system/function/debounce.js';
 import { defer } from '../../../../../system/promise.js';
 import { pluralize, truncateMiddle } from '../../../../../system/string.js';
@@ -509,7 +509,7 @@ export class GlTimelineChart extends GlElement {
 	private calculateChangeMetrics(dataset: TimelineDatum[]): { q1: number; q3: number; maxChanges: number } {
 		const sortedChanges = dataset.map(c => (c.additions ?? 0) + (c.deletions ?? 0)).sort((a, b) => a - b);
 		return {
-			maxChanges: sortedChanges[sortedChanges.length - 1],
+			maxChanges: sortedChanges.at(-1)!,
 			q1: sortedChanges[Math.floor(sortedChanges.length * 0.25)],
 			q3: sortedChanges[Math.floor(sortedChanges.length * 0.75)],
 		};
@@ -573,7 +573,7 @@ export class GlTimelineChart extends GlElement {
 		};
 	}
 
-	@log<GlTimelineChart['prepareChartData']>({ args: { 0: d => d?.length } })
+	@debug({ args: dataset => ({ dataset: dataset?.length }) })
 	private prepareChartData(
 		dataset: TimelineDatum[],
 		metrics: { minRadius: number; maxRadius: number; q1: number; q3: number; maxChanges: number },
@@ -658,7 +658,7 @@ export class GlTimelineChart extends GlElement {
 		return { axes: axes, columns: columns, names: names, types: types, xs: xs };
 	}
 
-	@log({ args: false })
+	@debug({ args: false })
 	private async renderChart(
 		dataPromise: NonNullable<State['dataset']>,
 		loading: ReturnType<typeof defer<void>>,
@@ -691,9 +691,7 @@ export class GlTimelineChart extends GlElement {
 			return;
 		}
 
-		this.range = data.length
-			? [new Date(data[data.length - 1].date), new Date(data[0].date)]
-			: [new Date(), new Date()];
+		this.range = data.length ? [new Date(data.at(-1)!.date), new Date(data[0].date)] : [new Date(), new Date()];
 
 		// Initialize plugins
 		bar();
@@ -831,8 +829,8 @@ export class GlTimelineChart extends GlElement {
 
 							if (commit.sha === '') {
 								return /*html*/ `<div class="bb-tooltip">
-									<section class="author">Working Tree</section>
-									<section class="message"><span class="message__content">No uncommitted changes</span></section>
+									<div class="author">Working Tree</div>
+									<div class="message"><span class="message__content">No uncommitted changes</span></div>
 								</div>`;
 							}
 
@@ -851,27 +849,23 @@ export class GlTimelineChart extends GlElement {
 							}
 
 							const branchesSection = commit.branches?.length
-								? /*html*/ `<section class="branches"><code-icon icon="git-branch"></code-icon> ${commit.branches.join(
-										', ',
-									)}</section>`
+								? /*html*/ `<div class="branches"><span class="icon">\u{EA68}</span> ${commit.branches.join(', ')}</div>`
 								: '';
 
 							return /*html*/ `<div class="bb-tooltip">
-									<section class="author">${commit.author}</section>
-									<section>
-										<span class="sha"><code-icon icon="git-commit"></code-icon> ${shortenRevision(commit.sha)}</span>
+									<div class="author">${commit.author}</div>
+									<div>
+										<span class="sha"><span class="icon">\u{EAFC}</span> ${shortenRevision(commit.sha)}</span>
 										<span class="changes">${additionsLabel}${deletionsLabel}</span>
-									</section>
-									<section class="date">
-										<code-icon icon="history"></code-icon><span class="date--relative">${capitalize(
-											fromNow(date),
-										)}</span><span class="date--absolute">(${formatDate(
+									</div>
+									<div class="date">
+										<span class="icon">\u{EA82}</span><span class="date--relative">${capitalize(fromNow(date))}</span><span class="date--absolute">(${formatDate(
 											date,
 											this.dateFormat,
 										)})</span>
-									</section>
+									</div>
 									${branchesSection}
-									<section class="message"><span class="message__content">${commit.message}</span></section>
+									<div class="message"><span class="message__content">${commit.message}</span></div>
 								</div>`;
 						},
 						show: true,

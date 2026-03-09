@@ -2,7 +2,6 @@ import type { CancellationToken, Uri } from 'vscode';
 import type { Container } from '../../../../container.js';
 import { isCancellationError } from '../../../../errors.js';
 import type { GitCache } from '../../../../git/cache.js';
-import { GitErrorHandling } from '../../../../git/commandOptions.js';
 import type { GitRefsSubProvider } from '../../../../git/gitProvider.js';
 import type { GitBranch } from '../../../../git/models/branch.js';
 import type { GitReference } from '../../../../git/models/reference.js';
@@ -10,9 +9,8 @@ import { deletedOrMissing } from '../../../../git/models/revision.js';
 import type { GitTag } from '../../../../git/models/tag.js';
 import { createReference } from '../../../../git/utils/reference.utils.js';
 import { isShaWithOptionalRevisionSuffix, isUncommitted } from '../../../../git/utils/revision.utils.js';
-import { debug, log } from '../../../../system/decorators/log.js';
-import { Logger } from '../../../../system/logger.js';
-import { getLogScope } from '../../../../system/logger.scope.js';
+import { debug, trace } from '../../../../system/decorators/log.js';
+import { getScopedLogger } from '../../../../system/logger.scope.js';
 import type { Git } from '../git.js';
 import type { LocalGitProviderInternal } from '../localGitProvider.js';
 
@@ -24,22 +22,17 @@ export class RefsGitSubProvider implements GitRefsSubProvider {
 		private readonly provider: LocalGitProviderInternal,
 	) {}
 
-	@log()
+	@debug()
 	async checkIfCouldBeValidBranchOrTagName(repoPath: string, ref: string): Promise<boolean> {
 		try {
-			const result = await this.git.exec(
-				{ cwd: repoPath, errors: GitErrorHandling.Throw },
-				'check-ref-format',
-				'--branch',
-				ref,
-			);
+			const result = await this.git.exec({ cwd: repoPath, errors: 'throw' }, 'check-ref-format', '--branch', ref);
 			return Boolean(result.stdout.trim());
 		} catch {
 			return false;
 		}
 	}
 
-	@log()
+	@debug()
 	async getMergeBase(
 		repoPath: string,
 		ref1: string,
@@ -47,7 +40,7 @@ export class RefsGitSubProvider implements GitRefsSubProvider {
 		options?: { forkPoint?: boolean },
 		cancellation?: CancellationToken,
 	): Promise<string | undefined> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		try {
 			const result = await this.git.exec(
@@ -61,14 +54,14 @@ export class RefsGitSubProvider implements GitRefsSubProvider {
 
 			return result.stdout.split('\n')[0].trim() || undefined;
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 			if (isCancellationError(ex)) throw ex;
 
 			return undefined;
 		}
 	}
 
-	@log()
+	@debug()
 	async getReference(
 		repoPath: string,
 		ref: string,
@@ -103,7 +96,7 @@ export class RefsGitSubProvider implements GitRefsSubProvider {
 		return createReference(ref, repoPath, { refType: 'revision' });
 	}
 
-	@log()
+	@debug()
 	async getSymbolicReferenceName(
 		repoPath: string,
 		ref: string,
@@ -112,7 +105,7 @@ export class RefsGitSubProvider implements GitRefsSubProvider {
 		const supportsEndOfOptions = await this.git.supports('git:rev-parse:end-of-options');
 
 		const result = await this.git.exec(
-			{ cwd: repoPath, cancellation: cancellation, errors: GitErrorHandling.Ignore },
+			{ cwd: repoPath, cancellation: cancellation, errors: 'ignore' },
 			'rev-parse',
 			'--verify',
 			'--quiet',
@@ -124,7 +117,7 @@ export class RefsGitSubProvider implements GitRefsSubProvider {
 		return result.stdout.trim() || undefined;
 	}
 
-	@log({ args: { 1: false } })
+	@debug({ args: repoPath => ({ repoPath: repoPath }) })
 	async hasBranchOrTag(
 		repoPath: string | undefined,
 		options?: {
@@ -146,7 +139,7 @@ export class RefsGitSubProvider implements GitRefsSubProvider {
 		return branches.length !== 0 || tags.length !== 0;
 	}
 
-	@log()
+	@debug()
 	async isValidReference(
 		repoPath: string,
 		ref: string,
@@ -157,7 +150,7 @@ export class RefsGitSubProvider implements GitRefsSubProvider {
 		return Boolean((await this.validateReference(repoPath, ref, relativePath, cancellation))?.length);
 	}
 
-	@debug()
+	@trace()
 	async validateReference(
 		repoPath: string,
 		ref: string,
@@ -170,7 +163,7 @@ export class RefsGitSubProvider implements GitRefsSubProvider {
 		const supportsEndOfOptions = await this.git.supports('git:rev-parse:end-of-options');
 
 		const result = await this.git.exec(
-			{ cwd: repoPath, cancellation: cancellation, errors: GitErrorHandling.Ignore },
+			{ cwd: repoPath, cancellation: cancellation, errors: 'ignore' },
 			'rev-parse',
 			'--verify',
 			supportsEndOfOptions ? '--end-of-options' : undefined,
@@ -179,19 +172,19 @@ export class RefsGitSubProvider implements GitRefsSubProvider {
 		return result.stdout.trim() || undefined;
 	}
 
-	@log()
+	@debug()
 	async updateReference(
 		repoPath: string,
 		ref: string,
 		newRef: string,
 		cancellation?: CancellationToken,
 	): Promise<void> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		try {
 			await this.git.exec({ cwd: repoPath, cancellation: cancellation }, 'update-ref', ref, newRef);
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 			if (isCancellationError(ex)) throw ex;
 		}
 	}

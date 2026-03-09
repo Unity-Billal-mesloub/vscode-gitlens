@@ -141,6 +141,15 @@ export interface TelemetryEvents extends WebviewShowAbortedEvents, WebviewShownE
 	/** Sent when a VS Code command is executed by a GitLens provided action */
 	'command/core': CoreCommandEvent;
 
+	/** Sent when a commit is signed */
+	'commit/signed': CommitSignedEvent;
+	/** Sent when commit signing fails */
+	'commit/signing/failed': CommitSigningFailedEvent;
+	/** Sent when commit signing setup is completed */
+	'commit/signing/setup': CommitSigningSetupEvent;
+	/** Sent when commit signing setup wizard is opened */
+	'commit/signing/setupWizard/opened': CommitSigningSetupWizardOpenedEvent;
+
 	/** Sent when the Inspect view is shown */
 	'commitDetails/shown': DetailsShownEvent;
 	/** Sent when the user changes the selected tab (mode) on the Graph Details view */
@@ -182,6 +191,11 @@ export interface TelemetryEvents extends WebviewShowAbortedEvents, WebviewShownE
 	'composer/warning/workingDirectoryChanged': ComposerEvent;
 	/** Sent when the user is warned that the index has changed in the Commit Composer */
 	'composer/warning/indexChanged': ComposerEvent;
+
+	/** Sent when a conflict-prone git command (merge, rebase, cherry-pick, revert, stash apply/pop) is run */
+	'gitCommand/run': GitCommandRunEvent;
+	/** Sent when a conflict occurs while running a conflict-prone git command */
+	'gitCommand/conflict': GitCommandConflictEvent;
 
 	/** Sent when the Commit Graph is shown */
 	'graph/shown': GraphShownEvent;
@@ -277,6 +291,8 @@ export interface TelemetryEvents extends WebviewShowAbortedEvents, WebviewShownE
 
 	'op/gate/deadlock': OperationGateDeadlockEvent;
 	'op/git/aborted': OperationGitAbortedEvent;
+	/** Sent when a background git command waited in the queue */
+	'op/git/queueWait': OperationGitQueueWaitEvent;
 
 	/** Sent when fetching the product config fails */
 	'productConfig/failed': ProductConfigFailedEvent;
@@ -335,6 +351,23 @@ export interface TelemetryEvents extends WebviewShowAbortedEvents, WebviewShownE
 	'repository/opened': RepositoryOpenedEvent;
 	/** Sent when a repository's visibility is first requested */
 	'repository/visibility': RepositoryVisibilityEvent;
+
+	/** Sent when the user opens Start Review; use `instance` to correlate a StartReview "session" */
+	'startReview/open': StartReviewEventDataBase;
+	/** Sent when the launchpad is opened; use `instance` to correlate a StartReview "session" */
+	'startReview/opened': StartReviewConnectedEventData;
+	/** Sent when the user takes an action on a Start Review PR */
+	'startReview/pr/action': StartReviewPrActionEvent;
+	/** Sent when the user chooses a PR to review in the second step */
+	'startReview/pr/chosen': StartReviewPrChosenEvent;
+	/** Sent when the user reaches the "connect an integration" step of Start Review */
+	'startReview/steps/connect': StartReviewConnectedEventData;
+	/** Sent when the user reaches the "choose a PR" step of Start Review */
+	'startReview/steps/pr': StartReviewConnectedEventData;
+	/** Sent when the user chooses to connect an integration */
+	'startReview/title/action': StartReviewTitleActionEvent;
+	/** Sent when the user chooses to manage integrations */
+	'startReview/action': StartReviewActionEvent;
 
 	/** Sent when the user opens Start Work; use `instance` to correlate a StartWork "session" */
 	'startWork/open': StartWorkEventDataBase;
@@ -465,6 +498,18 @@ interface AIEventDataSendBase extends AIEventDataBase {
 	'config.largePromptThreshold'?: number;
 	'config.usedCustomInstructions'?: boolean;
 
+	'diff.files.count'?: number;
+	'diff.hunks.count'?: number;
+	'diff.lines.count'?: number;
+	'diff.hash'?: string;
+
+	'customInstructions.used'?: boolean;
+	'customInstructions.length'?: number;
+	'customInstructions.setting.used'?: boolean;
+	'customInstructions.setting.length'?: number;
+	'customInstructions.commitMessage.setting.used'?: boolean;
+	'customInstructions.commitMessage.setting.length'?: number;
+
 	'warning.exceededLargePromptThreshold'?: boolean;
 	'warning.promptTruncated'?: boolean;
 
@@ -545,6 +590,7 @@ export interface CLIInstallStartedEvent {
 	source?: Sources;
 	autoInstall: boolean;
 	attempts: number;
+	insiders: boolean;
 }
 
 export interface CLIInstallSucceededEvent {
@@ -552,6 +598,7 @@ export interface CLIInstallSucceededEvent {
 	attempts: number;
 	source?: Sources;
 	version?: string;
+	insiders: boolean;
 }
 
 export interface CLIInstallFailedEvent {
@@ -559,6 +606,7 @@ export interface CLIInstallFailedEvent {
 	attempts: number;
 	'error.message'?: string;
 	source?: Sources;
+	insiders: boolean;
 }
 
 export interface MCPSetupStartedEvent {
@@ -713,6 +761,24 @@ interface DetailsReachabilityFailedEvent {
 	'failed.error'?: string;
 }
 
+interface CommitSignedEvent {
+	format: 'gpg' | 'ssh' | 'x509' | 'openpgp';
+}
+
+interface CommitSigningFailedEvent {
+	reason: 'noKey' | 'gpgNotFound' | 'sshNotFound' | 'passphraseFailed' | 'unknown';
+	format: 'gpg' | 'ssh' | 'x509' | 'openpgp';
+}
+
+interface CommitSigningSetupEvent {
+	format: 'gpg' | 'ssh' | 'x509' | 'openpgp';
+	keyGenerated: boolean;
+}
+
+interface CommitSigningSetupWizardOpenedEvent {
+	alreadyConfigured: boolean;
+}
+
 export type FeaturePreviewDayEventData = Record<`day.${number}.startedOn`, string>;
 export type FeaturePreviewEventData = {
 	feature: FeaturePreviews;
@@ -723,6 +789,16 @@ export type FeaturePreviewEventData = {
 export type FeaturePreviewActionEventData = {
 	action: `start-preview-trial:${FeaturePreviews}`;
 } & FeaturePreviewEventData;
+
+type GitCommandType = 'merge' | 'rebase' | 'cherry-pick' | 'revert' | 'stash-apply' | 'stash-pop';
+
+interface GitCommandRunEvent {
+	command: GitCommandType;
+}
+
+interface GitCommandConflictEvent {
+	command: GitCommandType;
+}
 
 type GraphContextEventData = WebviewTelemetryContext & Partial<RepositoryContext>;
 export type GraphTelemetryContext = GraphContextEventData;
@@ -838,6 +914,7 @@ type ComposerContextDiffData = {
 	'context.diff.files.count': number;
 	'context.diff.hunks.count': number;
 	'context.diff.lines.count': number;
+	'context.diff.hash': string;
 	'context.diff.staged.exists': boolean;
 	'context.diff.unstaged.exists': boolean;
 	'context.diff.unstaged.included': boolean;
@@ -1052,6 +1129,8 @@ interface OperationGateDeadlockEvent {
 	key: string;
 	prop: string;
 	timeout: number;
+	/** Whether this is just a warning or the gate was forcibly cleared */
+	status: 'warning' | 'aborted';
 }
 
 interface OperationGitAbortedEvent {
@@ -1059,6 +1138,23 @@ interface OperationGitAbortedEvent {
 	duration: number;
 	timeout: number;
 	reason: 'timeout' | 'cancellation' | 'unknown';
+}
+
+interface OperationGitQueueWaitEvent {
+	/** Priority level of the command that waited */
+	priority: 'interactive' | 'normal' | 'background';
+	/** Time in ms the command waited in the queue before executing */
+	waitTime: number;
+	/** Number of active git processes when this command started */
+	active: number;
+	/** Number of interactive commands queued */
+	'queued.interactive': number;
+	/** Number of normal commands queued */
+	'queued.normal': number;
+	/** Number of background commands queued */
+	'queued.background': number;
+	/** Configured max concurrent processes */
+	maxConcurrent: number;
 }
 
 interface ProductConfigFailedEvent {
@@ -1196,6 +1292,8 @@ type RepositoryContributorsDistributionEventData = {
 
 interface RepositoryOpenedEvent extends RepositoryEventData, RepositoryContributorsDistributionEventData {
 	'repository.remoteProviders': string;
+	'repository.submodules.openedCount': number;
+	'repository.worktrees.openedCount': number;
 	'repository.contributors.commits.count': number | undefined;
 	'repository.contributors.commits.avgPerContributor': number | undefined;
 	'repository.contributors.count': number | undefined;
@@ -1205,6 +1303,35 @@ interface RepositoryOpenedEvent extends RepositoryEventData, RepositoryContribut
 interface RepositoryVisibilityEvent extends Partial<RepositoryEventData> {
 	'repository.visibility': 'private' | 'public' | 'local' | undefined;
 }
+
+interface StartReviewEventDataBase {
+	/** @order 1 */
+	instance: number;
+}
+
+interface StartReviewEventData extends StartReviewEventDataBase {
+	'items.count'?: number;
+}
+export type StartReviewTelemetryContext = StartReviewEventData;
+
+type StartReviewConnectedEventData = StartReviewEventData & {
+	connected: boolean;
+};
+
+type StartReviewPrActionEvent = StartReviewConnectedEventData & {
+	action: 'soft-open';
+} & Partial<Record<`item.${string}`, string | number | boolean>>;
+
+type StartReviewPrChosenEvent = StartReviewConnectedEventData &
+	Partial<Record<`item.${string}`, string | number | boolean>>;
+
+type StartReviewTitleActionEvent = StartReviewConnectedEventData & {
+	action: 'connect';
+};
+
+type StartReviewActionEvent = StartReviewConnectedEventData & {
+	action: 'manage' | 'connect';
+};
 
 interface StartWorkEventDataBase {
 	/** @order 1 */
@@ -1355,6 +1482,7 @@ type WalkthroughActionNames =
 	| 'open/launchpad'
 	| 'create/worktree'
 	| 'open/help-center'
+	| 'plus/login'
 	| 'plus/sign-up'
 	| 'plus/upgrade'
 	| 'plus/reactivate'
@@ -1370,13 +1498,24 @@ interface WalkthroughCompletionEvent {
 	'context.key': WalkthroughContextKeys;
 }
 
-type WelcomeActionNames = 'plus/sign-up' | 'dismiss' | 'shown';
+type WelcomeActionNames =
+	| 'dismiss'
+	| 'open/composer'
+	| 'open/graph'
+	| 'open/home-view'
+	| 'open/help-center'
+	| 'open/help-center/community-vs-pro'
+	| 'open/launchpad'
+	| 'plus/login'
+	| 'plus/reactivate'
+	| 'plus/sign-up'
+	| 'plus/upgrade'
+	| 'shown';
 
-type WelcomeActionEvent = {
-	name: WelcomeActionNames;
-	viewedCarouselPages?: number;
-	proButtonClicked?: boolean;
-};
+type WelcomeActionEvent =
+	| { name: 'shown' | 'dismiss'; viewedCarouselPages?: number; proButtonClicked?: boolean }
+	| { type: 'command'; name: WelcomeActionNames; command: string }
+	| { type: 'url'; name: WelcomeActionNames; url: string };
 
 type WebviewContextEventData = {
 	'context.webview.id': string;
@@ -1453,6 +1592,7 @@ export type Sources =
 	| 'scm'
 	| 'scm-input'
 	| 'settings'
+	| 'startReview'
 	| 'startWork'
 	| 'statusbar:hover'
 	| 'subscription'
@@ -1488,7 +1628,11 @@ export type TrackedUsage = {
 /**
  * Actions that happen without a command
  */
-export type TrackedGlActions = `gitlens.ai.generateCommits`;
+export type TrackedGlActions =
+	| 'gitlens.ai.generateCommits'
+	| 'gitlens.mcp.ipcRequest'
+	| 'gitlens.mcp.chatInteraction'
+	| 'gitlens.mcp.bundledMcpDefinitionProvided';
 
 export type TrackedUsageFeatures =
 	| `${WebviewPanelTypes}Webview`

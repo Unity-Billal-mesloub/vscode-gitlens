@@ -98,12 +98,14 @@ export class MergeGitCommand extends QuickCommand<State> {
 			options.noCommit = true;
 		}
 
+		this.container.telemetry.sendEvent('gitCommand/run', { command: 'merge' });
+
 		try {
 			await state.repo.git.ops?.merge(state.reference.ref, options);
 		} catch (ex) {
 			// Don't show an error message if the user intentionally aborted the merge
 			if (MergeError.is(ex, 'aborted')) {
-				Logger.log(ex.message, this.title);
+				Logger.debug(ex.message, this.title);
 				return;
 			}
 
@@ -117,6 +119,7 @@ export class MergeGitCommand extends QuickCommand<State> {
 			}
 
 			if (MergeError.is(ex, 'conflicts')) {
+				this.container.telemetry.sendEvent('gitCommand/conflict', { command: 'merge' });
 				void window.showWarningMessage(
 					'Unable to merge due to conflicts. Resolve the conflicts before continuing, or abort the merge.',
 				);

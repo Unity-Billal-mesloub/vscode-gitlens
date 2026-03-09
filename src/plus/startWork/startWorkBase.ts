@@ -1,5 +1,5 @@
-import type { QuickInputButton, QuickPick, QuickPickItem } from 'vscode';
-import { Uri } from 'vscode';
+import type { QuickInputButton, QuickPick } from 'vscode';
+import { Uri, window } from 'vscode';
 import { md5 } from '@env/crypto.js';
 import type { ManageCloudIntegrationsCommandArgs } from '../../commands/cloudIntegrations.js';
 import type {
@@ -34,8 +34,10 @@ import { proBadge } from '../../constants.js';
 import type { Source, Sources, StartWorkTelemetryContext, TelemetryEvents } from '../../constants.telemetry.js';
 import type { Container } from '../../container.js';
 import type { PlusFeatures } from '../../features.js';
+import type { GitBranch } from '../../git/models/branch.js';
 import type { Issue, IssueShape } from '../../git/models/issue.js';
 import type { Repository } from '../../git/models/repository.js';
+import type { GitWorktree } from '../../git/models/worktree.js';
 import { getOrOpenIssueRepository } from '../../git/utils/-webview/issue.utils.js';
 import type { QuickPickItemOfT } from '../../quickpicks/items/common.js';
 import { createQuickPickItemOfT } from '../../quickpicks/items/common.js';
@@ -47,6 +49,12 @@ import { openUrl } from '../../system/-webview/vscode/uris.js';
 import { getScopedCounter } from '../../system/counter.js';
 import { fromNow } from '../../system/date.js';
 import { some } from '../../system/iterable.js';
+import type { Deferred } from '../../system/promise.js';
+import type { ConnectMoreIntegrationsItem } from '../integrations/utils/-webview/integration.quickPicks.js';
+import {
+	isManageIntegrationsItem,
+	manageIntegrationsItem,
+} from '../integrations/utils/-webview/integration.quickPicks.js';
 
 const instanceCounter = getScopedCounter();
 
@@ -71,21 +79,9 @@ const supportedStartWorkIntegrations = [
 ];
 type SupportedStartWorkIntegrationIds = (typeof supportedStartWorkIntegrations)[number];
 
-type ConnectMoreIntegrationsItem = QuickPickItem & {
-	item: undefined;
-};
 const connectMoreIntegrationsItem: ConnectMoreIntegrationsItem = {
 	label: 'Connect an Additional Integration...',
 	detail: 'Connect additional integrations to view and start work on their issues',
-	item: undefined,
-};
-
-type ManageIntegrationsItem = QuickPickItem & {
-	item: undefined;
-};
-const manageIntegrationsItem: ManageIntegrationsItem = {
-	label: 'Manage integrations...',
-	detail: 'Manage your connected integrations',
 	item: undefined,
 };
 
@@ -113,7 +109,7 @@ export function assertsStartWorkStepState(state: StepState<StartWorkState>): ass
 }
 export interface StartWorkBaseCommandArgs {
 	readonly command: 'startWork' | 'associateIssueWithBranch';
-	source?: Sources;
+	source?: Sources | Source;
 }
 export interface StartWorkOverrides {
 	ownSource?: 'startWork' | 'associateIssueWithBranch';
@@ -127,6 +123,11 @@ export interface StartWorkOverrides {
 
 interface StartWorkState {
 	item?: StartWorkItem;
+	issueUrl?: string;
+	instructions?: string;
+	useDefaults?: boolean;
+	openChatOnComplete?: boolean;
+	result?: Deferred<{ branch: GitBranch; worktree?: GitWorktree }>;
 }
 
 export abstract class StartWorkBaseCommand extends QuickCommand<StartWorkState> {
@@ -150,7 +151,7 @@ export abstract class StartWorkBaseCommand extends QuickCommand<StartWorkState> 
 		});
 
 		this.telemetryEventKey = telemetryEventKey;
-		this.source = { source: args?.source ?? 'commandPalette' };
+		this.source = typeof args?.source === 'object' ? args.source : { source: args?.source ?? 'commandPalette' };
 
 		if (this.container.telemetry.enabled) {
 			this.telemetryContext = { instance: instanceCounter.next() };
@@ -186,103 +187,125 @@ export abstract class StartWorkBaseCommand extends QuickCommand<StartWorkState> 
 		using steps = new StepsController<StepNames>(context, this);
 
 		let opened = false;
-		while (!steps.isComplete) {
-			context.title = this.title;
-			const hasConnectedIntegrations = [...context.connectedIntegrations.values()].some(c => c);
+		try {
+			while (!steps.isComplete) {
+				context.title = this.title;
+				const hasConnectedIntegrations = [...context.connectedIntegrations.values()].some(c => c);
 
-			if (steps.isAtStep(Steps.ConnectIntegrations) || !hasConnectedIntegrations) {
-				using step = steps.enterStep(Steps.ConnectIntegrations);
+				if (steps.isAtStep(Steps.ConnectIntegrations) || !hasConnectedIntegrations) {
+					using step = steps.enterStep(Steps.ConnectIntegrations);
 
-				if (this.container.telemetry.enabled) {
-					this.container.telemetry.sendEvent(
-						opened ? `${this.telemetryEventKey}/steps/connect` : `${this.telemetryEventKey}/opened`,
-						{
-							...context.telemetryContext!,
-							connected: false,
-						},
-						this.source,
-					);
+					if (this.container.telemetry.enabled) {
+						this.container.telemetry.sendEvent(
+							opened ? `${this.telemetryEventKey}/steps/connect` : `${this.telemetryEventKey}/opened`,
+							{
+								...context.telemetryContext!,
+								connected: false,
+							},
+							this.source,
+						);
+					}
+
+					opened = true;
+
+					const isUsingCloudIntegrations = configuration.get('cloudIntegrations.enabled', undefined, false);
+					const result = isUsingCloudIntegrations
+						? yield* this.confirmCloudIntegrationsConnectStep(state, context)
+						: yield* this.confirmLocalIntegrationConnectStep(state, context);
+					if (result === StepResultBreak) {
+						if (step.goBack() == null) break;
+						continue;
+					}
+
+					result.resume();
+
+					const connected = result.connected;
+					if (!connected) continue;
 				}
 
-				opened = true;
-
-				const isUsingCloudIntegrations = configuration.get('cloudIntegrations.enabled', undefined, false);
-				const result = isUsingCloudIntegrations
-					? yield* this.confirmCloudIntegrationsConnectStep(state, context)
-					: yield* this.confirmLocalIntegrationConnectStep(state, context);
-				if (result === StepResultBreak) {
-					if (step.goBack() == null) break;
-					continue;
+				let plusFeature: PlusFeatures | undefined;
+				if (this.key === 'startWork') {
+					plusFeature = 'startWork';
+				} else if (this.key === 'associateIssueWithBranch') {
+					plusFeature = 'associateIssueWithBranch';
 				}
 
-				result.resume();
+				if (plusFeature != null && steps.isAtStepOrUnset(Steps.EnsureAccess)) {
+					using step = steps.enterStep(Steps.EnsureAccess);
 
-				const connected = result.connected;
-				if (!connected) continue;
+					const result = yield* ensureAccessStep(this.container, plusFeature, state, context, step);
+					if (result === StepResultBreak) {
+						if (step.goBack() == null) break;
+						continue;
+					}
+				}
+
+				if (steps.isAtStepOrUnset(Steps.PickIssue) || state.item == null) {
+					using step = steps.enterStep(Steps.PickIssue);
+
+					if (this.container.telemetry.enabled) {
+						this.container.telemetry.sendEvent(
+							opened ? `${this.telemetryEventKey}/steps/issue` : `${this.telemetryEventKey}/opened`,
+							{
+								...context.telemetryContext!,
+								connected: true,
+							},
+							this.source,
+						);
+					}
+
+					opened = true;
+
+					let preSelecteditem: StartWorkItem | undefined = undefined;
+					// Auto-select issue if issueUrl is provided
+					if (state.issueUrl) {
+						if (context.result == null) {
+							await updateContextItems(this.container, context);
+						}
+						preSelecteditem = context.result?.items.find(item => item.issue.url === state.issueUrl);
+
+						// If issue not found, show error and fall through to picker
+						if (preSelecteditem == null) {
+							void window.showErrorMessage(
+								`Issue not found: ${state.issueUrl}. Please select an issue manually.`,
+							);
+						}
+					}
+
+					const result = preSelecteditem ?? (yield* this.pickStartWorkIssueStep(state, context));
+					if (result === StepResultBreak) {
+						state.item = undefined;
+						if (step.goBack() == null) break;
+						continue;
+					}
+
+					state.item = result;
+
+					if (this.container.telemetry.enabled) {
+						this.container.telemetry.sendEvent(
+							`${this.telemetryEventKey}/issue/chosen`,
+							{
+								...context.telemetryContext!,
+								...buildItemTelemetryData(result),
+								connected: true,
+							},
+							this.source,
+						);
+					}
+				}
+
+				assertsStartWorkStepState(state);
+
+				if (this.continuation) {
+					yield* this.continuation(state, context);
+				}
+
+				steps.markStepsComplete();
 			}
-
-			let plusFeature: PlusFeatures | undefined;
-			if (this.key === 'startWork') {
-				plusFeature = 'startWork';
-			} else if (this.key === 'associateIssueWithBranch') {
-				plusFeature = 'associateIssueWithBranch';
+		} finally {
+			if (state.result?.pending) {
+				state.result.cancel(new Error('Start Work cancelled'));
 			}
-
-			if (plusFeature != null && steps.isAtStepOrUnset(Steps.EnsureAccess)) {
-				using step = steps.enterStep(Steps.EnsureAccess);
-
-				const result = yield* ensureAccessStep(this.container, plusFeature, state, context, step);
-				if (result === StepResultBreak) {
-					if (step.goBack() == null) break;
-					continue;
-				}
-			}
-
-			if (steps.isAtStepOrUnset(Steps.PickIssue) || state.item == null) {
-				using step = steps.enterStep(Steps.PickIssue);
-
-				if (this.container.telemetry.enabled) {
-					this.container.telemetry.sendEvent(
-						opened ? `${this.telemetryEventKey}/steps/issue` : `${this.telemetryEventKey}/opened`,
-						{
-							...context.telemetryContext!,
-							connected: true,
-						},
-						this.source,
-					);
-				}
-
-				opened = true;
-
-				const result = yield* this.pickStartWorkIssueStep(state, context);
-				if (result === StepResultBreak) {
-					state.item = undefined;
-					if (step.goBack() == null) break;
-					continue;
-				}
-
-				state.item = result;
-
-				if (this.container.telemetry.enabled) {
-					this.container.telemetry.sendEvent(
-						`${this.telemetryEventKey}/issue/chosen`,
-						{
-							...context.telemetryContext!,
-							...buildItemTelemetryData(result),
-							connected: true,
-						},
-						this.source,
-					);
-				}
-			}
-
-			assertsStartWorkStepState(state);
-
-			if (this.continuation) {
-				yield* this.continuation(state, context);
-			}
-
-			steps.markStepsComplete();
 		}
 
 		return steps.isComplete ? undefined : StepResultBreak;
@@ -559,12 +582,18 @@ export abstract class StartWorkBaseCommand extends QuickCommand<StartWorkState> 
 	}
 
 	private sendItemActionTelemetry(action: 'soft-open', item: StartWorkItem, context: StartWorkContext) {
-		this.container.telemetry.sendEvent(`${this.telemetryEventKey}/issue/action`, {
-			...context.telemetryContext!,
-			...buildItemTelemetryData(item),
-			action: action,
-			connected: true,
-		});
+		if (!this.container.telemetry.enabled) return;
+
+		this.container.telemetry.sendEvent(
+			`${this.telemetryEventKey}/issue/action`,
+			{
+				...context.telemetryContext!,
+				...buildItemTelemetryData(item),
+				action: action,
+				connected: true,
+			},
+			this.source,
+		);
 	}
 
 	private sendTitleActionTelemetry(
@@ -607,7 +636,9 @@ function buildItemTelemetryData(item: StartWorkItem) {
 	};
 }
 
-async function getConnectedIntegrations(container: Container): Promise<Map<SupportedStartWorkIntegrationIds, boolean>> {
+export async function getConnectedIntegrations(
+	container: Container,
+): Promise<Map<SupportedStartWorkIntegrationIds, boolean>> {
 	const connected = new Map<SupportedStartWorkIntegrationIds, boolean>();
 	await Promise.allSettled(
 		supportedStartWorkIntegrations.map(async integrationId => {
@@ -650,10 +681,6 @@ function getStartWorkItemIdHash(item: StartWorkItem): string {
 
 function isConnectMoreIntegrationsItem(item: unknown): item is ConnectMoreIntegrationsItem {
 	return item === connectMoreIntegrationsItem;
-}
-
-function isManageIntegrationsItem(item: unknown): item is ManageIntegrationsItem {
-	return item === manageIntegrationsItem;
 }
 
 function repeatSpaces(count: number) {

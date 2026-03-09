@@ -8,7 +8,6 @@ import type { GitCommit } from '../git/models/commit.js';
 import { isCommit } from '../git/models/commit.js';
 import type { GitRevisionReference } from '../git/models/reference.js';
 import type { RepositoryChangeEvent } from '../git/models/repository.js';
-import { RepositoryChange, RepositoryChangeComparisonMode } from '../git/models/repository.js';
 import type { GitUser } from '../git/models/user.js';
 import { matchContributor } from '../git/utils/contributor.utils.js';
 import { getLastFetchedUpdateInterval } from '../git/utils/fetch.utils.js';
@@ -19,7 +18,7 @@ import { createCommand, executeCommand } from '../system/-webview/command.js';
 import { configuration } from '../system/-webview/configuration.js';
 import { setContext } from '../system/-webview/context.js';
 import { gate } from '../system/decorators/gate.js';
-import { debug } from '../system/decorators/log.js';
+import { trace } from '../system/decorators/log.js';
 import { disposableInterval } from '../system/function.js';
 import type { UsageChangeEvent } from '../telemetry/usageTracker.js';
 import { RepositoriesSubscribeableNode } from './nodes/abstract/repositoriesSubscribeableNode.js';
@@ -70,7 +69,7 @@ export class CommitsRepositoryNode extends RepositoryFolderNode<CommitsView, Bra
 	}
 
 	@gate()
-	@debug()
+	@trace()
 	override async refresh(reset: boolean = false): Promise<void> {
 		if (reset) {
 			this.child = undefined;
@@ -81,7 +80,7 @@ export class CommitsRepositoryNode extends RepositoryFolderNode<CommitsView, Bra
 		await this.ensureSubscription();
 	}
 
-	@debug()
+	@trace()
 	protected override async subscribe(): Promise<Disposable> {
 		const lastFetched = (await this.repo?.getLastFetched()) ?? 0;
 
@@ -90,9 +89,13 @@ export class CommitsRepositoryNode extends RepositoryFolderNode<CommitsView, Bra
 			return Disposable.from(
 				await super.subscribe(),
 				disposableInterval(() => {
+					// Skip update if view is not visible to reduce unnecessary work
+					if (!this.view.visible) return;
+
 					// Check if the interval should change, and if so, reset it
 					if (interval !== getLastFetchedUpdateInterval(lastFetched)) {
 						void this.resetSubscription();
+						return;
 					}
 
 					if (this.splatted) {
@@ -108,21 +111,20 @@ export class CommitsRepositoryNode extends RepositoryFolderNode<CommitsView, Bra
 	}
 
 	protected changed(e: RepositoryChangeEvent): boolean {
-		if (this.view.config.showStashes && e.changed(RepositoryChange.Stash, RepositoryChangeComparisonMode.Any)) {
+		if (this.view.config.showStashes && e.changed('stash')) {
 			return true;
 		}
 
 		return e.changed(
-			RepositoryChange.Config,
-			RepositoryChange.Head,
-			RepositoryChange.Heads,
-			RepositoryChange.Index,
-			RepositoryChange.Remotes,
-			RepositoryChange.RemoteProviders,
-			RepositoryChange.PausedOperationStatus,
-			RepositoryChange.Worktrees,
-			RepositoryChange.Unknown,
-			RepositoryChangeComparisonMode.Any,
+			'config',
+			'head',
+			'heads',
+			'index',
+			'remotes',
+			'remoteProviders',
+			'pausedOp',
+			'worktrees',
+			'unknown',
 		);
 	}
 }
@@ -137,16 +139,18 @@ export class CommitsViewNode extends RepositoriesSubscribeableNode<CommitsView, 
 				await this.view.container.git.isDiscoveringRepositories;
 			}
 
-			const repositories = await this.view.getFilteredRepositories();
+			const repositories = this.view.getFilteredRepositories();
 			if (!repositories.length) {
 				this.view.message = 'No commits could be found.';
 
 				return [];
 			}
 
+			const repo = this.view.container.git.getBestRepositoryOrFirst();
 			this.children = repositories.map(
 				r =>
 					new CommitsRepositoryNode(GitUri.fromRepoPath(r.path), this.view, this, r, {
+						expand: r === repo,
 						showBranchAndLastFetched: true,
 					}),
 			);
@@ -262,6 +266,7 @@ export class CommitsView extends ViewBase<'commits', CommitsViewNode, CommitsVie
 				},
 				this,
 			),
+			registerViewCommand(this.getQualifiedCommand('filterRepositories'), () => this.filterRepositories(), this),
 			registerViewCommand(
 				this.getQualifiedCommand('setFilesLayoutToAuto'),
 				() => this.setFilesLayout('auto'),
@@ -473,7 +478,15 @@ export class CommitsView extends ViewBase<'commits', CommitsViewNode, CommitsVie
 		}
 
 		if (filter) {
-			repo ??= await getRepositoryOrShowPicker(this.container, 'Filter Commits', 'Choose a repository');
+			repo ??= await getRepositoryOrShowPicker(
+				this.container,
+				'Filter Commits',
+				'Choose a repository',
+				undefined,
+				{
+					excludeWorktrees: true,
+				},
+			);
 			if (repo == null) return;
 
 			let authors = this.state.filterCommits.get(repo.id);

@@ -6,12 +6,11 @@ import type { Container } from '../container.js';
 import { GitUri } from '../git/gitUri.js';
 import type { GitContributor } from '../git/models/contributor.js';
 import type { RepositoryChangeEvent } from '../git/models/repository.js';
-import { RepositoryChange, RepositoryChangeComparisonMode } from '../git/models/repository.js';
 import { executeCommand } from '../system/-webview/command.js';
 import { configuration } from '../system/-webview/configuration.js';
 import { setContext } from '../system/-webview/context.js';
 import { gate } from '../system/decorators/gate.js';
-import { debug } from '../system/decorators/log.js';
+import { trace } from '../system/decorators/log.js';
 import { RepositoriesSubscribeableNode } from './nodes/abstract/repositoriesSubscribeableNode.js';
 import { RepositoryFolderNode } from './nodes/abstract/repositoryFolderNode.js';
 import type { ViewNode } from './nodes/abstract/viewNode.js';
@@ -31,7 +30,7 @@ export class ContributorsRepositoryNode extends RepositoryFolderNode<Contributor
 		return this.child.getChildren();
 	}
 
-	@debug()
+	@trace()
 	protected override async subscribe(): Promise<Disposable> {
 		return Disposable.from(
 			await super.subscribe(),
@@ -40,13 +39,7 @@ export class ContributorsRepositoryNode extends RepositoryFolderNode<Contributor
 	}
 
 	protected changed(e: RepositoryChangeEvent): boolean {
-		return e.changed(
-			RepositoryChange.Config,
-			RepositoryChange.Heads,
-			RepositoryChange.Remotes,
-			RepositoryChange.Unknown,
-			RepositoryChangeComparisonMode.Any,
-		);
+		return e.changed('config', 'heads', 'remotes', 'unknown');
 	}
 }
 
@@ -60,14 +53,18 @@ export class ContributorsViewNode extends RepositoriesSubscribeableNode<Contribu
 				await this.view.container.git.isDiscoveringRepositories;
 			}
 
-			const repositories = await this.view.getFilteredRepositories();
+			const repositories = this.view.getFilteredRepositories();
 			if (!repositories.length) {
 				this.view.message = 'No contributors could be found.';
 				return [];
 			}
 
+			const repo = this.view.container.git.getBestRepositoryOrFirst();
 			this.children = repositories.map(
-				r => new ContributorsRepositoryNode(GitUri.fromRepoPath(r.path), this.view, this, r),
+				r =>
+					new ContributorsRepositoryNode(GitUri.fromRepoPath(r.path), this.view, this, r, {
+						expand: r === repo,
+					}),
 			);
 		}
 
@@ -156,6 +153,7 @@ export class ContributorsView extends ViewBase<'contributors', ContributorsViewN
 				},
 				this,
 			),
+			registerViewCommand(this.getQualifiedCommand('filterRepositories'), () => this.filterRepositories(), this),
 			registerViewCommand(
 				this.getQualifiedCommand('setFilesLayoutToAuto'),
 				() => this.setFilesLayout('auto'),

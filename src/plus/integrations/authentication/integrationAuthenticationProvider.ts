@@ -4,7 +4,7 @@ import type { IntegrationIds } from '../../../constants.integrations.js';
 import { GitCloudHostIntegrationId } from '../../../constants.integrations.js';
 import type { Sources } from '../../../constants.telemetry.js';
 import type { Container } from '../../../container.js';
-import { debug } from '../../../system/decorators/log.js';
+import { trace } from '../../../system/decorators/log.js';
 import { getBuiltInIntegrationSession } from '../../gk/utils/-webview/integrationAuthentication.utils.js';
 import {
 	isCloudGitSelfManagedHostIntegrationId,
@@ -64,7 +64,7 @@ abstract class IntegrationAuthenticationProviderBase<
 
 	protected abstract get authProviderId(): ID;
 
-	@debug()
+	@trace()
 	async deleteSession(descriptor: IntegrationAuthenticationSessionDescriptor): Promise<void> {
 		const configured = await this.configuredIntegrationService.getConfigured(this.authProviderId, {
 			cloud: this.cloud,
@@ -83,7 +83,7 @@ abstract class IntegrationAuthenticationProviderBase<
 		}
 	}
 
-	@debug()
+	@trace()
 	async deleteAllSessions(): Promise<void> {
 		const configured = await this.configuredIntegrationService.getConfigured(this.authProviderId, {
 			cloud: this.cloud,
@@ -100,7 +100,7 @@ abstract class IntegrationAuthenticationProviderBase<
 		}
 	}
 
-	@debug()
+	@trace()
 	async getSession(
 		descriptor: IntegrationAuthenticationSessionDescriptor,
 		options?:
@@ -210,7 +210,7 @@ export abstract class CloudIntegrationAuthenticationProvider<
 			  },
 	): Promise<ProviderAuthenticationSession | undefined> {
 		if (options?.forceNewSession) {
-			if (!(await this.disconnectCloudSession())) {
+			if ((await this.disconnectCloudSession()) === 'failure') {
 				return undefined;
 			}
 
@@ -298,6 +298,7 @@ export abstract class CloudIntegrationAuthenticationProvider<
 				label: '',
 			},
 			cloud: true,
+			type: session.type,
 			expiresAt: new Date(session.expiresIn * 1000 + Date.now()),
 			// Note: do not use the session's domain, because the format is different than in our model
 			domain: descriptor.domain,
@@ -305,14 +306,14 @@ export abstract class CloudIntegrationAuthenticationProvider<
 		};
 	}
 
-	private async disconnectCloudSession(): Promise<boolean> {
+	private async disconnectCloudSession(): Promise<'skip' | 'success' | 'failure'> {
 		const loggedIn = await this.container.subscription.getAuthenticationSession(false);
-		if (!loggedIn) return false;
+		if (!loggedIn) return 'skip';
 
 		const cloudIntegrations = await this.container.cloudIntegrations;
-		if (cloudIntegrations == null) return false;
+		if (cloudIntegrations == null) return 'skip';
 
-		return cloudIntegrations.disconnect(this.authProviderId);
+		return (await cloudIntegrations.disconnect(this.authProviderId)) ? 'success' : 'failure';
 	}
 }
 
@@ -337,7 +338,7 @@ export class BuiltInAuthenticationProvider extends LocalIntegrationAuthenticatio
 		throw new Error('Method `createSession` should never be used in BuiltInAuthenticationProvider');
 	}
 
-	@debug()
+	@trace()
 	override async getSession(
 		descriptor: IntegrationAuthenticationSessionDescriptor,
 		options?: { createIfNeeded?: boolean; forceNewSession?: boolean },

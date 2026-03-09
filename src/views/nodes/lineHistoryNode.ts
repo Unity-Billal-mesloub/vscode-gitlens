@@ -6,17 +6,16 @@ import type { GitFile } from '../../git/models/file.js';
 import { GitFileIndexStatus } from '../../git/models/fileStatus.js';
 import type { GitLog } from '../../git/models/log.js';
 import type { RepositoryChangeEvent, RepositoryFileSystemChangeEvent } from '../../git/models/repository.js';
-import { RepositoryChange, RepositoryChangeComparisonMode } from '../../git/models/repository.js';
 import { deletedOrMissing } from '../../git/models/revision.js';
 import { getBranchAheadRange } from '../../git/utils/-webview/branch.utils.js';
 import { isUncommitted } from '../../git/utils/revision.utils.js';
 import { gate } from '../../system/decorators/gate.js';
-import { debug } from '../../system/decorators/log.js';
+import { trace } from '../../system/decorators/log.js';
 import { memoize } from '../../system/decorators/memoize.js';
 import { weakEvent } from '../../system/event.js';
 import { filterMap, find } from '../../system/iterable.js';
-import { getLoggableName, Logger } from '../../system/logger.js';
-import { startLogScope } from '../../system/logger.scope.js';
+import { getLoggableName } from '../../system/logger.js';
+import { maybeStartScopedLogger } from '../../system/logger.scope.js';
 import { getSettledValue } from '../../system/promise.js';
 import type { FileHistoryView } from '../fileHistoryView.js';
 import type { LineHistoryView } from '../lineHistoryView.js';
@@ -144,7 +143,7 @@ export class LineHistoryNode
 			);
 
 			if (log.hasMore) {
-				children.push(new LoadMoreNode(this.view, this, children[children.length - 1]));
+				children.push(new LoadMoreNode(this.view, this, children.at(-1)!));
 			}
 		}
 
@@ -181,7 +180,7 @@ export class LineHistoryNode
 			: `:${this.selection.start.line + 1}-${this.selection.end.line + 1}`;
 	}
 
-	@debug()
+	@trace()
 	protected subscribe(): Disposable | undefined {
 		const repo = this.view.container.git.getRepository(this.uri);
 		if (repo == null) return undefined;
@@ -199,22 +198,12 @@ export class LineHistoryNode
 	}
 
 	private onRepositoryChanged(e: RepositoryChangeEvent) {
-		if (
-			!e.changed(
-				RepositoryChange.Index,
-				RepositoryChange.Heads,
-				RepositoryChange.Remotes,
-				RepositoryChange.RemoteProviders,
-				RepositoryChange.PausedOperationStatus,
-				RepositoryChange.Unknown,
-				RepositoryChangeComparisonMode.Any,
-			)
-		) {
+		if (!e.changed('index', 'heads', 'remotes', 'remoteProviders', 'pausedOp', 'unknown')) {
 			return;
 		}
 
-		using scope = startLogScope(`${getLoggableName(this)}.onRepositoryChanged(e=${e.toString()})`, false);
-		Logger.debug(scope, 'triggering node refresh');
+		using scope = maybeStartScopedLogger(`${getLoggableName(this)}.onRepositoryChanged(e=${e.toString()})`);
+		scope?.trace('triggering node refresh');
 
 		void this.triggerChange(true);
 	}
@@ -222,16 +211,15 @@ export class LineHistoryNode
 	private onFileSystemChanged(e: RepositoryFileSystemChangeEvent) {
 		if (!e.uris.has(this.uri)) return;
 
-		using scope = startLogScope(
+		using scope = maybeStartScopedLogger(
 			`${getLoggableName(this)}.onFileSystemChanged(e=${this.uri.toString(true)})`,
-			false,
 		);
-		Logger.debug(scope, 'triggering node refresh');
+		scope?.trace('triggering node refresh');
 
 		void this.triggerChange(true);
 	}
 
-	@debug()
+	@trace()
 	override refresh(reset: boolean = false): void | { cancel: boolean } | Promise<void | { cancel: boolean }> {
 		if (reset) {
 			this._log = undefined;

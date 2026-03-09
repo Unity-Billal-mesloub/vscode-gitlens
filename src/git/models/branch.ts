@@ -3,9 +3,8 @@ import type { CancellationToken } from 'vscode';
 import type { EnrichedAutolink } from '../../autolinks/models/autolinks.js';
 import type { Container } from '../../container.js';
 import { formatDate, fromNow } from '../../system/date.js';
-import { debug } from '../../system/decorators/log.js';
+import { loggable, trace } from '../../system/decorators/log.js';
 import { memoize } from '../../system/decorators/memoize.js';
-import { getLoggableName } from '../../system/logger.js';
 import type { MaybePausedResult } from '../../system/promise.js';
 import { isBranchStarred } from '../utils/-webview/branch.utils.js';
 import {
@@ -27,6 +26,7 @@ export function isBranch(branch: unknown): branch is GitBranch {
 	return branch instanceof GitBranch;
 }
 
+@loggable(i => i.id)
 export class GitBranch implements GitBranchReference {
 	readonly refType = 'branch';
 	readonly detached: boolean;
@@ -69,10 +69,6 @@ export class GitBranch implements GitBranchReference {
 		}
 
 		this.upstream = upstream?.name ? upstream : undefined;
-	}
-
-	toString(): string {
-		return `${getLoggableName(this)}(${this.id})`;
 	}
 
 	/** @returns The most recent date among lastModifiedDate, lastAccessedDate, and branch.date */
@@ -118,7 +114,7 @@ export class GitBranch implements GitBranchReference {
 		return 'upToDate';
 	}
 
-	@memoize<GitBranch['formatDate']>(format => format ?? 'MMMM Do, YYYY h:mma')
+	@memoize<GitBranch['formatDate']>({ resolver: format => format ?? 'MMMM Do, YYYY h:mma' })
 	formatDate(format?: string | null): string {
 		return this.date != null ? formatDate(this.date, format ?? 'MMMM Do, YYYY h:mma') : '';
 	}
@@ -127,7 +123,7 @@ export class GitBranch implements GitBranchReference {
 		return this.date != null ? fromNow(this.date) : '';
 	}
 
-	@debug()
+	@trace()
 	async getAssociatedPullRequest(options?: {
 		avatarSize?: number;
 		include?: PullRequestState[];
@@ -152,7 +148,7 @@ export class GitBranch implements GitBranchReference {
 		);
 	}
 
-	@memoize()
+	@memoize({ version: 'providers' })
 	async getEnrichedAutolinks(): Promise<Map<string, EnrichedAutolink> | undefined> {
 		const remote = await this.container.git.getRepositoryService(this.repoPath).remotes.getBestRemoteWithProvider();
 		const branchAutolinks = await this.container.autolinks.getBranchAutolinks(this.name, remote);
@@ -176,7 +172,7 @@ export class GitBranch implements GitBranchReference {
 		return getBranchTrackingWithoutRemote(this);
 	}
 
-	@memoize()
+	@memoize({ version: 'providers' })
 	async getRemote(): Promise<GitRemote | undefined> {
 		const remoteName = this.getRemoteName();
 		if (remoteName == null) return undefined;
@@ -204,7 +200,7 @@ export class GitBranch implements GitBranchReference {
 		return getUpstreamStatus(this.upstream, options);
 	}
 
-	@debug()
+	@trace()
 	async getWorktree(cancellation?: CancellationToken): Promise<GitWorktree | undefined> {
 		if (this.worktree === false) return undefined;
 		if (this.worktree == null) {
@@ -260,6 +256,27 @@ export class GitBranch implements GitBranchReference {
 				await this.container.git.getRepository(this.repoPath)?.star(remote);
 			}
 		}
+	}
+
+	/** Creates a copy of this branch with a different repoPath and optionally a different current flag — ONLY used for worktree-aware caching */
+	withRepoPath(repoPath: string, current?: boolean): GitBranch {
+		const newCurrent = current ?? this.current;
+		return repoPath === this.repoPath && newCurrent === this.current
+			? this
+			: new GitBranch(
+					this.container,
+					repoPath,
+					this.refName,
+					newCurrent,
+					this.date,
+					this.lastAccessedDate,
+					this.lastModifiedDate,
+					this.sha,
+					this.upstream,
+					this.worktree,
+					this.detached,
+					this.rebasing,
+				);
 	}
 }
 

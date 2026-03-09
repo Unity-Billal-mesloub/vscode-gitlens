@@ -1,6 +1,5 @@
 import type { Container } from '../../../../container.js';
 import type { GitCache } from '../../../../git/cache.js';
-import { GitErrorHandling } from '../../../../git/commandOptions.js';
 import { CherryPickError, MergeError, PushError, RebaseError, RevertError } from '../../../../git/errors.js';
 import type { GitOperationsSubProvider } from '../../../../git/gitProvider.js';
 import type { GitBranchReference, GitReference } from '../../../../git/models/reference.js';
@@ -8,10 +7,9 @@ import { getBranchNameAndRemote, getBranchTrackingWithoutRemote } from '../../..
 import { isBranchReference } from '../../../../git/utils/reference.utils.js';
 import { configuration } from '../../../../system/-webview/configuration.js';
 import { getHostEditorCommand } from '../../../../system/-webview/vscode.js';
-import { log } from '../../../../system/decorators/log.js';
+import { debug } from '../../../../system/decorators/log.js';
 import { sequentialize } from '../../../../system/decorators/sequentialize.js';
-import { Logger } from '../../../../system/logger.js';
-import { getLogScope } from '../../../../system/logger.scope.js';
+import { getScopedLogger } from '../../../../system/logger.scope.js';
 import type { Git, PushForceOptions } from '../git.js';
 import { getGitCommandError } from '../git.js';
 import type { LocalGitProviderInternal } from '../localGitProvider.js';
@@ -24,30 +22,30 @@ export class OperationsGitSubProvider implements GitOperationsSubProvider {
 		private readonly provider: LocalGitProviderInternal,
 	) {}
 
-	@log()
+	@debug()
 	async checkout(
 		repoPath: string,
 		ref: string,
 		options?: { createBranch?: string } | { path?: string },
 	): Promise<void> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		try {
 			await this.git.checkout(repoPath, ref, options);
 			this.container.events.fire('git:cache:reset', { repoPath: repoPath, types: ['branches', 'status'] });
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 			throw ex;
 		}
 	}
 
-	@log()
+	@debug()
 	async cherryPick(
 		repoPath: string,
 		revs: string[],
 		options?: { edit?: boolean; noCommit?: boolean },
 	): Promise<void> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const args = ['cherry-pick'];
 		if (options?.edit) {
@@ -80,9 +78,9 @@ export class OperationsGitSubProvider implements GitOperationsSubProvider {
 		args.push(...revs);
 
 		try {
-			await this.git.exec({ cwd: repoPath, errors: GitErrorHandling.Throw }, ...args);
+			await this.git.exec({ cwd: repoPath, errors: 'throw' }, ...args);
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 			throw getGitCommandError(
 				'cherry-pick',
 				ex,
@@ -96,12 +94,12 @@ export class OperationsGitSubProvider implements GitOperationsSubProvider {
 	}
 
 	@sequentialize<OperationsGitSubProvider['fetch']>({ getQueueKey: rp => rp })
-	@log()
+	@debug()
 	async fetch(
 		repoPath: string,
 		options?: { all?: boolean; branch?: GitBranchReference; prune?: boolean; pull?: boolean; remote?: string },
 	): Promise<void> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const { branch, ...opts } = options ?? {};
 		try {
@@ -121,18 +119,18 @@ export class OperationsGitSubProvider implements GitOperationsSubProvider {
 
 			this.container.events.fire('git:cache:reset', { repoPath: repoPath });
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 			throw ex;
 		}
 	}
 
-	@log()
+	@debug()
 	async merge(
 		repoPath: string,
 		ref: string,
 		options?: { fastForward?: boolean | 'only'; noCommit?: boolean; squash?: boolean },
 	): Promise<void> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const args = ['merge'];
 
@@ -155,13 +153,13 @@ export class OperationsGitSubProvider implements GitOperationsSubProvider {
 		try {
 			await this.git.exec(
 				// Avoid a timeout since merges can take a long time (set to 0 to disable)
-				{ cwd: repoPath, errors: GitErrorHandling.Throw, timeout: 0 },
+				{ cwd: repoPath, errors: 'throw', timeout: 0 },
 				...args,
 			);
 
 			this.container.events.fire('git:cache:reset', { repoPath: repoPath });
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 			throw getGitCommandError(
 				'merge',
 				ex,
@@ -175,9 +173,9 @@ export class OperationsGitSubProvider implements GitOperationsSubProvider {
 	}
 
 	@sequentialize<OperationsGitSubProvider['pull']>({ getQueueKey: rp => rp })
-	@log()
+	@debug()
 	async pull(repoPath: string, options?: { rebase?: boolean; tags?: boolean }): Promise<void> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		try {
 			await this.git.pull(repoPath, {
@@ -187,18 +185,18 @@ export class OperationsGitSubProvider implements GitOperationsSubProvider {
 
 			this.container.events.fire('git:cache:reset', { repoPath: repoPath });
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 			throw ex;
 		}
 	}
 
 	@sequentialize<OperationsGitSubProvider['push']>({ getQueueKey: rp => rp })
-	@log()
+	@debug()
 	async push(
 		repoPath: string,
 		options?: { reference?: GitReference; force?: boolean; publish?: { remote: string } },
 	): Promise<void> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		let branchName: string;
 		let remoteName: string | undefined;
@@ -284,18 +282,18 @@ export class OperationsGitSubProvider implements GitOperationsSubProvider {
 
 			this.container.events.fire('git:cache:reset', { repoPath: repoPath });
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 			throw ex;
 		}
 	}
 
-	@log()
+	@debug()
 	async rebase(
 		repoPath: string,
 		upstream: string,
 		options?: { autoStash?: boolean; branch?: string; interactive?: boolean; onto?: string; updateRefs?: boolean },
 	): Promise<void> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const args = ['rebase'];
 		let configs;
@@ -328,11 +326,11 @@ export class OperationsGitSubProvider implements GitOperationsSubProvider {
 		try {
 			await this.git.exec(
 				// Avoid a timeout since rebases can take a long time (set to 0 to disable)
-				{ cwd: repoPath, errors: GitErrorHandling.Throw, configs: configs, timeout: 0 },
+				{ cwd: repoPath, errors: 'throw', configs: configs, timeout: 0 },
 				...args,
 			);
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 			throw getGitCommandError(
 				'rebase',
 				ex,
@@ -349,25 +347,25 @@ export class OperationsGitSubProvider implements GitOperationsSubProvider {
 		}
 	}
 
-	@log()
+	@debug()
 	async reset(
 		repoPath: string,
 		rev: string,
 		options?: { mode?: 'hard' | 'keep' | 'merge' | 'mixed' | 'soft' },
 	): Promise<void> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		try {
 			await this.git.reset(repoPath, [], { ...options, rev: rev });
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 			throw ex;
 		}
 	}
 
-	@log()
+	@debug()
 	async revert(repoPath: string, refs: string[], options?: { editMessage?: boolean }): Promise<void> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const args = ['revert'];
 
@@ -382,13 +380,13 @@ export class OperationsGitSubProvider implements GitOperationsSubProvider {
 		try {
 			await this.git.exec(
 				// Avoid a timeout since reverts can take a long time (set to 0 to disable)
-				{ cwd: repoPath, errors: GitErrorHandling.Throw, timeout: 0 },
+				{ cwd: repoPath, errors: 'throw', timeout: 0 },
 				...args,
 			);
 
 			this.container.events.fire('git:cache:reset', { repoPath: repoPath });
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 
 			throw getGitCommandError(
 				'revert',

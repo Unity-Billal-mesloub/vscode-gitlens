@@ -5,7 +5,6 @@ import { proBadge } from '../constants.js';
 import type { Container } from '../container.js';
 import { GitUri } from '../git/gitUri.js';
 import type { RepositoryChangeEvent } from '../git/models/repository.js';
-import { RepositoryChange, RepositoryChangeComparisonMode } from '../git/models/repository.js';
 import type { GitWorktree } from '../git/models/worktree.js';
 import { ensurePlusFeaturesEnabled } from '../plus/gk/utils/-webview/plus.utils.js';
 import { executeCommand } from '../system/-webview/command.js';
@@ -30,21 +29,11 @@ export class WorktreesRepositoryNode extends RepositoryFolderNode<WorktreesView,
 	}
 
 	protected changed(e: RepositoryChangeEvent): boolean {
-		if (this.view.config.showStashes && e.changed(RepositoryChange.Stash, RepositoryChangeComparisonMode.Any)) {
+		if (this.view.config.showStashes && e.changed('stash')) {
 			return true;
 		}
 
-		return e.changed(
-			RepositoryChange.Config,
-			RepositoryChange.Heads,
-			RepositoryChange.Index,
-			RepositoryChange.Remotes,
-			RepositoryChange.RemoteProviders,
-			RepositoryChange.PausedOperationStatus,
-			RepositoryChange.Worktrees,
-			RepositoryChange.Unknown,
-			RepositoryChangeComparisonMode.Any,
-		);
+		return e.changed('config', 'heads', 'index', 'remotes', 'remoteProviders', 'pausedOp', 'worktrees', 'unknown');
 	}
 }
 
@@ -61,7 +50,7 @@ export class WorktreesViewNode extends RepositoriesSubscribeableNode<WorktreesVi
 				await this.view.container.git.isDiscoveringRepositories;
 			}
 
-			const repositories = await this.view.getFilteredRepositories();
+			const repositories = this.view.getFilteredRepositories();
 			if (!repositories.length) {
 				this.view.message = 'No worktrees could be found.';
 				return [];
@@ -71,7 +60,10 @@ export class WorktreesViewNode extends RepositoriesSubscribeableNode<WorktreesVi
 			if (repo != null && !(await repo.git.supports('git:worktrees'))) return [];
 
 			this.children = repositories.map(
-				r => new WorktreesRepositoryNode(GitUri.fromRepoPath(r.path), this.view, this, r),
+				r =>
+					new WorktreesRepositoryNode(GitUri.fromRepoPath(r.path), this.view, this, r, {
+						expand: r === repo,
+					}),
 			);
 		}
 
@@ -143,6 +135,7 @@ export class WorktreesView extends ViewBase<'worktrees', WorktreesViewNode, Work
 				},
 				this,
 			),
+			registerViewCommand(this.getQualifiedCommand('filterRepositories'), () => this.filterRepositories(), this),
 			registerViewCommand(this.getQualifiedCommand('setLayoutToList'), () => this.setLayout('list'), this),
 			registerViewCommand(this.getQualifiedCommand('setLayoutToTree'), () => this.setLayout('tree'), this),
 			registerViewCommand(this.getQualifiedCommand('setSortByDate'), () => this.setSortByDate(), this),

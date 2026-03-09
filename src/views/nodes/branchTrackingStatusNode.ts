@@ -11,7 +11,7 @@ import { createRevisionRange } from '../../git/utils/revision.utils.js';
 import { getUpstreamStatus } from '../../git/utils/status.utils.js';
 import { fromNow } from '../../system/date.js';
 import { gate } from '../../system/decorators/gate.js';
-import { debug } from '../../system/decorators/log.js';
+import { trace } from '../../system/decorators/log.js';
 import { first, last, map } from '../../system/iterable.js';
 import { pluralize } from '../../system/string.js';
 import type { ViewsWithCommits } from '../viewBase.js';
@@ -118,7 +118,7 @@ export class BranchTrackingStatusNode
 		if (this.upstreamType === 'ahead') {
 			// Since the last commit when we are looking 'ahead' can have no previous (because of the range given) -- look it up
 			commits = [...log.commits.values()];
-			const commit = commits[commits.length - 1];
+			const commit = commits.at(-1)!;
 			const previousSha = await commit.getPreviousSha();
 			if (previousSha == null) {
 				const previousLog = await this.view.container.git
@@ -157,7 +157,7 @@ export class BranchTrackingStatusNode
 			);
 
 			if (log.hasMore) {
-				children.push(new LoadMoreNode(this.view, this, children[children.length - 1]));
+				children.push(new LoadMoreNode(this.view, this, children.at(-1)!));
 			}
 		}
 
@@ -331,7 +331,7 @@ export class BranchTrackingStatusNode
 		return item;
 	}
 
-	@debug()
+	@trace()
 	override refresh(reset?: boolean): void {
 		if (reset) {
 			this._log = undefined;

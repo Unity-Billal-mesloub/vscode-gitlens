@@ -5,11 +5,10 @@ import type { Response } from '@env/fetch.js';
 import type { TrackingContext } from '../../constants.telemetry.js';
 import type { Container } from '../../container.js';
 import { openUrl } from '../../system/-webview/vscode/uris.js';
-import { debug } from '../../system/decorators/log.js';
+import { trace } from '../../system/decorators/log.js';
 import type { DeferredEvent, DeferredEventExecutor } from '../../system/event.js';
 import { promisifyDeferred } from '../../system/event.js';
-import { Logger } from '../../system/logger.js';
-import { getLogScope } from '../../system/logger.scope.js';
+import { getScopedLogger } from '../../system/logger.scope.js';
 import type { ServerConnection } from './serverConnection.js';
 
 export const LoginUriPathPrefix = 'login';
@@ -41,20 +40,20 @@ export class AuthenticationConnection implements Disposable {
 		return new Promise<void>(resolve => setTimeout(resolve, 50));
 	}
 
-	@debug<AuthenticationConnection['getAccountInfo']>({ args: false, exit: r => `returned ${r.id}` })
+	@trace({ args: false, exit: r => `returned ${r.id}` })
 	async getAccountInfo(token: string): Promise<AccountInfo> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		let rsp: Response;
 		try {
 			rsp = await this.connection.fetchGkApi('user', undefined, { token: token });
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 			throw ex;
 		}
 
 		if (!rsp.ok) {
-			Logger.error(undefined, `Getting account info failed: (${rsp.status}) ${rsp.statusText}`);
+			scope?.error(undefined, `Getting account info failed: (${rsp.status}) ${rsp.statusText}`);
 			throw new Error(rsp.statusText);
 		}
 
@@ -62,14 +61,9 @@ export class AuthenticationConnection implements Disposable {
 		return { id: json.id, accountName: json.username };
 	}
 
-	@debug()
-	async login(
-		scopes: string[],
-		scopeKey: string,
-		signUp: boolean = false,
-		context?: TrackingContext,
-	): Promise<string> {
-		const scope = getLogScope();
+	@trace()
+	async login(scopeKey: string, signUp: boolean = false, context?: TrackingContext): Promise<string> {
+		const scope = getScopedLogger();
 
 		this.updateStatusBarItem(true);
 
@@ -82,9 +76,9 @@ export class AuthenticationConnection implements Disposable {
 			Uri.parse(`${env.uriScheme}://${this.container.context.extension.id}/${AuthenticationUriPathPrefix}`),
 		);
 
-		const url = this.container.urls.getGkDevUrl(
+		const url = await this.container.urls.getGkDevUrl(
 			signUp ? 'register' : 'login',
-			`${scopes.includes('gitlens') ? 'source=gitlens&' : ''}${
+			`${
 				context != null ? `context=${context}&` : ''
 			}state=${encodeURIComponent(gkstate)}&redirect_uri=${encodeURIComponent(callbackUri.toString(true))}`,
 		);
@@ -93,9 +87,9 @@ export class AuthenticationConnection implements Disposable {
 			const clipboard = await env.clipboard.readText();
 			if (clipboard === url) {
 				// If the clipboard contains the URL, we can assume the user has copied it (via the copy button on the dialog as vscode will just say the url failed to open, e.g `false`)
-				Logger.warn(scope, 'Looks like the user copied login URL');
+				scope?.warn('Looks like the user copied login URL');
 			} else {
-				Logger.error(undefined, scope, 'Opening login URL failed');
+				scope?.error(undefined, 'Opening login URL failed');
 
 				this._pendingStates.delete(scopeKey);
 				this.updateStatusBarItem(false);
@@ -132,7 +126,7 @@ export class AuthenticationConnection implements Disposable {
 			const token = await this.getTokenFromCodeAndState(code, gkstate, scopeKey);
 			return token;
 		} catch (ex) {
-			Logger.error(ex, scope);
+			scope?.error(ex);
 			throw ex;
 		} finally {
 			this._cancellationSource?.cancel();

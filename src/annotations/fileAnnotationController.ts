@@ -31,7 +31,7 @@ import { setContext } from '../system/-webview/context.js';
 import type { KeyboardScope } from '../system/-webview/keyboard.js';
 import { UriSet } from '../system/-webview/uriMap.js';
 import { isTrackableTextEditor } from '../system/-webview/vscode/editors.js';
-import { debug, log } from '../system/decorators/log.js';
+import { debug, trace } from '../system/decorators/log.js';
 import { once } from '../system/event.js';
 import type { Deferrable } from '../system/function/debounce.js';
 import { debounce } from '../system/function/debounce.js';
@@ -280,7 +280,7 @@ export class FileAnnotationController implements Disposable {
 		return this._toggleModes.get(annotationType) ?? 'file';
 	}
 
-	@log<FileAnnotationController['clear']>({ args: { 0: e => e?.document.uri.toString(true) } })
+	@debug({ args: e => ({ editor: e }) })
 	clear(editor: TextEditor | undefined): Promise<void> | undefined {
 		if (this.isInWindowToggle()) return this.clearAll();
 		if (editor == null) return;
@@ -288,7 +288,7 @@ export class FileAnnotationController implements Disposable {
 		return this.clearCore(getEditorCorrelationKey(editor), true);
 	}
 
-	@log()
+	@debug()
 	async clearAll(): Promise<void> {
 		this._windowAnnotationType = undefined;
 
@@ -424,12 +424,7 @@ export class FileAnnotationController implements Disposable {
 
 	async show(editor: TextEditor | undefined, type: FileAnnotationType, context?: AnnotationContext): Promise<boolean>;
 	async show(editor: TextEditor | undefined, type: 'changes', context?: ChangesAnnotationContext): Promise<boolean>;
-	@log<FileAnnotationController['show']>({
-		args: {
-			0: e => e?.document.uri.toString(true),
-			2: false,
-		},
-	})
+	@debug({ args: (editor, type) => ({ editor: editor, type: type }) })
 	async show(
 		editor: TextEditor | undefined,
 		type: FileAnnotationType,
@@ -502,12 +497,7 @@ export class FileAnnotationController implements Disposable {
 		context?: ChangesAnnotationContext,
 		on?: boolean,
 	): Promise<boolean>;
-	@log<FileAnnotationController['toggle']>({
-		args: {
-			0: e => e?.document.uri.toString(true),
-			2: false,
-		},
-	})
+	@debug({ args: (editor, type, _, on) => ({ editor: editor, type: type, on: on }) })
 	async toggle(
 		editor: TextEditor | undefined,
 		type: FileAnnotationType,
@@ -546,13 +536,13 @@ export class FileAnnotationController implements Disposable {
 		return this.show(editor, type, context);
 	}
 
-	@log()
+	@debug()
 	nextChange(): void {
 		const provider = this.getProvider(window.activeTextEditor);
 		provider?.nextChange?.();
 	}
 
-	@log()
+	@debug()
 	previousChange(): void {
 		const provider = this.getProvider(window.activeTextEditor);
 		provider?.previousChange?.();
@@ -562,22 +552,20 @@ export class FileAnnotationController implements Disposable {
 		if (!configuration.get('fileAnnotations.dismissOnEscape')) return;
 
 		// Allows pressing escape to exit the annotations
-		if (this._keyboardScope == null) {
-			this._keyboardScope = await this.container.keyboard.beginScope({
-				escape: {
-					onDidPressKey: async () => {
-						const e = this._editor;
-						if (e == null) return undefined;
+		this._keyboardScope ??= await this.container.keyboard.beginScope({
+			escape: {
+				onDidPressKey: async () => {
+					const e = this._editor;
+					if (e == null) return undefined;
 
-						await this.clear(e);
-						return undefined;
-					},
+					await this.clear(e);
+					return undefined;
 				},
-			});
-		}
+			},
+		});
 	}
 
-	@log()
+	@debug()
 	private async clearCore(key: TextEditorCorrelationKey, force?: boolean) {
 		const provider = this._annotationProviders.get(key);
 		if (provider == null) return;
@@ -701,9 +689,9 @@ export class FileAnnotationController implements Disposable {
 		return undefined;
 	}
 
-	@debug({
-		singleLine: true,
-		if: function () {
+	@trace({
+		onlyExit: true,
+		when: function (this: FileAnnotationController) {
 			return this._annotationsDisposable == null;
 		},
 	})
@@ -722,9 +710,9 @@ export class FileAnnotationController implements Disposable {
 		);
 	}
 
-	@debug({
-		singleLine: true,
-		if: function () {
+	@trace({
+		onlyExit: true,
+		when: function (this: FileAnnotationController) {
 			return this._annotationsDisposable != null;
 		},
 	})

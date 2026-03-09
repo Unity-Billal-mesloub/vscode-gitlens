@@ -7,7 +7,7 @@ import type { GitTagReference } from '../../git/models/reference.js';
 import type { GitTag } from '../../git/models/tag.js';
 import { shortenRevision } from '../../git/utils/revision.utils.js';
 import { gate } from '../../system/decorators/gate.js';
-import { debug } from '../../system/decorators/log.js';
+import { trace } from '../../system/decorators/log.js';
 import { map } from '../../system/iterable.js';
 import { pad } from '../../system/string.js';
 import type { ViewsWithTags } from '../viewBase.js';
@@ -69,7 +69,7 @@ export class TagNode extends ViewRefNode<'tag', ViewsWithTags, GitTagReference> 
 
 		if (log.hasMore) {
 			children.push(
-				new LoadMoreNode(this.view, this, children[children.length - 1], {
+				new LoadMoreNode(this.view, this, children.at(-1)!, {
 					getCount: () =>
 						this.view.container.git
 							.getRepositoryService(this.tag.repoPath)
@@ -102,7 +102,7 @@ export class TagNode extends ViewRefNode<'tag', ViewsWithTags, GitTagReference> 
 		return item;
 	}
 
-	@debug()
+	@trace()
 	override refresh(reset?: boolean): void {
 		if (reset) {
 			this._log = undefined;
@@ -111,13 +111,11 @@ export class TagNode extends ViewRefNode<'tag', ViewsWithTags, GitTagReference> 
 
 	private _log: GitLog | undefined;
 	private async getLog() {
-		if (this._log == null) {
-			this._log = await this.view.container.git
-				.getRepositoryService(this.uri.repoPath!)
-				.commits.getLog(this.tag.name, {
-					limit: this.limit ?? this.view.config.defaultItemLimit,
-				});
-		}
+		this._log ??= await this.view.container.git
+			.getRepositoryService(this.uri.repoPath!)
+			.commits.getLog(this.tag.name, {
+				limit: this.limit ?? this.view.config.defaultItemLimit,
+			});
 
 		return this._log;
 	}

@@ -1,5 +1,6 @@
 import * as process from 'process';
 import { HttpsProxyAgent } from 'https-proxy-agent';
+// eslint-disable-next-line e18e/ban-dependencies
 import fetch from 'node-fetch';
 import { configuration } from '../../system/-webview/configuration.js';
 import { Logger } from '../../system/logger.js';
@@ -26,7 +27,7 @@ export function getProxyAgent(strictSSL?: boolean): HttpsProxyAgent | undefined 
 	}
 
 	if (proxyUrl) {
-		Logger.debug(`Using https proxy: ${proxyUrl}`);
+		Logger.trace(`Using https proxy: ${proxyUrl}`);
 		const proxyURL = new URL(proxyUrl);
 		return new HttpsProxyAgent({
 			host: proxyURL.hostname,

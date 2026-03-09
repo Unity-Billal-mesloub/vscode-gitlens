@@ -3,7 +3,7 @@ import { Disposable, Hover, languages, Range, window } from 'vscode';
 import type { Container } from '../container.js';
 import { configuration } from '../system/-webview/configuration.js';
 import { isTrackableTextEditor } from '../system/-webview/vscode/editors.js';
-import { debug } from '../system/decorators/log.js';
+import { trace } from '../system/decorators/log.js';
 import { once } from '../system/event.js';
 import { Logger } from '../system/logger.js';
 import { areUrisEqual } from '../system/uri.js';
@@ -54,13 +54,12 @@ export class LineHoverController implements Disposable {
 		}
 	}
 
-	@debug<LineHoverController['onActiveLinesChanged']>({
-		args: {
-			0: e =>
-				`editor=${e.editor?.document.uri.toString(true)}, selections=${e.selections
-					?.map(s => `[${s.anchor}-${s.active}]`)
-					.join(',')}, pending=${Boolean(e.pending)}, reason=${e.reason}`,
-		},
+	@trace({
+		args: e => ({
+			e: `editor=${e.editor?.document.uri.toString(true)}, selections=${e.selections
+				?.map(s => `[${s.anchor}-${s.active}]`)
+				.join(',')}, pending=${Boolean(e.pending)}, reason=${e.reason}`,
+		}),
 	})
 	private onActiveLinesChanged(e: LinesChangeEvent) {
 		if (e.pending) return;
@@ -76,14 +75,13 @@ export class LineHoverController implements Disposable {
 		this.register(e.editor);
 	}
 
-	@debug<LineHoverController['provideDetailsHover']>({
-		args: {
-			0: document => Logger.toLoggable(document.uri),
-			1: position => `${position.line}:${position.character}`,
-			2: false,
-		},
+	@trace({
+		args: (document, position) => ({
+			document: Logger.toLoggable(document.uri),
+			position: `${position.line}:${position.character}`,
+		}),
 		exit: r => (r != null ? 'provided' : 'skipped'),
-		singleLine: true,
+		onlyExit: true,
 	})
 	async provideDetailsHover(
 		document: TextDocument,
@@ -139,14 +137,13 @@ export class LineHoverController implements Disposable {
 		return new Hover(message, range);
 	}
 
-	@debug<LineHoverController['provideChangesHover']>({
-		args: {
-			0: document => Logger.toLoggable(document.uri),
-			1: position => `${position.line}:${position.character}`,
-			2: false,
-		},
+	@trace({
+		args: (document, position) => ({
+			document: Logger.toLoggable(document.uri),
+			position: `${position.line}:${position.character}`,
+		}),
 		exit: r => (r != null ? 'provided' : 'skipped'),
-		singleLine: true,
+		onlyExit: true,
 	})
 	async provideChangesHover(
 		document: TextDocument,

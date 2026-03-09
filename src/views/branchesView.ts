@@ -7,7 +7,6 @@ import type { GitCommit } from '../git/models/commit.js';
 import { isCommit } from '../git/models/commit.js';
 import type { GitBranchReference, GitRevisionReference } from '../git/models/reference.js';
 import type { RepositoryChangeEvent } from '../git/models/repository.js';
-import { RepositoryChange, RepositoryChangeComparisonMode } from '../git/models/repository.js';
 import { getWorktreesByBranch } from '../git/utils/-webview/worktree.utils.js';
 import { getReferenceLabel } from '../git/utils/reference.utils.js';
 import { executeCommand } from '../system/-webview/command.js';
@@ -32,21 +31,20 @@ export class BranchesRepositoryNode extends RepositoryFolderNode<BranchesView, B
 	}
 
 	protected changed(e: RepositoryChangeEvent): boolean {
-		if (this.view.config.showStashes && e.changed(RepositoryChange.Stash, RepositoryChangeComparisonMode.Any)) {
+		if (this.view.config.showStashes && e.changed('stash')) {
 			return true;
 		}
 
 		return e.changed(
-			RepositoryChange.Config,
-			RepositoryChange.Heads,
-			RepositoryChange.Index,
-			RepositoryChange.Remotes,
-			RepositoryChange.RemoteProviders,
-			RepositoryChange.PausedOperationStatus,
-			RepositoryChange.Starred,
-			RepositoryChange.Worktrees,
-			RepositoryChange.Unknown,
-			RepositoryChangeComparisonMode.Any,
+			'config',
+			'heads',
+			'index',
+			'remotes',
+			'remoteProviders',
+			'pausedOp',
+			'starred',
+			'worktrees',
+			'unknown',
 		);
 	}
 }
@@ -61,7 +59,7 @@ export class BranchesViewNode extends RepositoriesSubscribeableNode<BranchesView
 				await this.view.container.git.isDiscoveringRepositories;
 			}
 
-			const repositories = await this.view.getFilteredRepositories();
+			const repositories = this.view.getFilteredRepositories();
 			if (!repositories.length) {
 				this.view.message = 'No branches could be found.';
 				return [];
@@ -73,8 +71,10 @@ export class BranchesViewNode extends RepositoriesSubscribeableNode<BranchesView
 				worktreesByBranch: worktreesByBranch?.size ? worktreesByBranch : undefined,
 			});
 
+			const repo = this.view.container.git.getBestRepositoryOrFirst();
 			this.children = repositories.map(
-				r => new BranchesRepositoryNode(GitUri.fromRepoPath(r.path), this.view, this, r),
+				r =>
+					new BranchesRepositoryNode(GitUri.fromRepoPath(r.path), this.view, this, r, { expand: r === repo }),
 			);
 		}
 
@@ -145,6 +145,7 @@ export class BranchesView extends ViewBase<'branches', BranchesViewNode, Branche
 				},
 				this,
 			),
+			registerViewCommand(this.getQualifiedCommand('filterRepositories'), () => this.filterRepositories(), this),
 			registerViewCommand(this.getQualifiedCommand('setLayoutToList'), () => this.setLayout('list'), this),
 			registerViewCommand(this.getQualifiedCommand('setLayoutToTree'), () => this.setLayout('tree'), this),
 			registerViewCommand(this.getQualifiedCommand('setSortByDate'), () => this.setSortByDate(), this),

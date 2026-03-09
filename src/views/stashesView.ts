@@ -5,7 +5,6 @@ import type { Container } from '../container.js';
 import { GitUri } from '../git/gitUri.js';
 import type { GitStashReference } from '../git/models/reference.js';
 import type { RepositoryChangeEvent } from '../git/models/repository.js';
-import { RepositoryChange, RepositoryChangeComparisonMode } from '../git/models/repository.js';
 import { getReferenceLabel } from '../git/utils/reference.utils.js';
 import { executeCommand } from '../system/-webview/command.js';
 import { configuration } from '../system/-webview/configuration.js';
@@ -26,7 +25,7 @@ export class StashesRepositoryNode extends RepositoryFolderNode<StashesView, Sta
 	}
 
 	protected changed(e: RepositoryChangeEvent): boolean {
-		return e.changed(RepositoryChange.Stash, RepositoryChange.Unknown, RepositoryChangeComparisonMode.Any);
+		return e.changed('stash', 'unknown');
 	}
 }
 
@@ -40,14 +39,15 @@ export class StashesViewNode extends RepositoriesSubscribeableNode<StashesView, 
 				await this.view.container.git.isDiscoveringRepositories;
 			}
 
-			const repositories = await this.view.getFilteredRepositories();
+			const repositories = this.view.getFilteredRepositories();
 			if (!repositories.length) {
 				this.view.message = 'No stashes could be found.';
 				return [];
 			}
 
+			const repo = this.view.container.git.getBestRepositoryOrFirst();
 			this.children = repositories.map(
-				r => new StashesRepositoryNode(GitUri.fromRepoPath(r.path), this.view, this, r),
+				r => new StashesRepositoryNode(GitUri.fromRepoPath(r.path), this.view, this, r, { expand: r === repo }),
 			);
 		}
 
@@ -110,6 +110,7 @@ export class StashesView extends ViewBase<'stashes', StashesViewNode, StashesVie
 				},
 				this,
 			),
+			registerViewCommand(this.getQualifiedCommand('filterRepositories'), () => this.filterRepositories(), this),
 			registerViewCommand(
 				this.getQualifiedCommand('setFilesLayoutToAuto'),
 				() => this.setFilesLayout('auto'),

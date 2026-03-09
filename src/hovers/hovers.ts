@@ -85,8 +85,8 @@ export async function changesMessage(
 		if (compareUris?.previous == null) return undefined;
 
 		message = `[$(compare-changes)](${DiffWithCommand.createMarkdownCommandLink({
-			lhs: { sha: compareUris.previous.sha ?? '', uri: compareUris.previous.documentUri() },
-			rhs: { sha: compareUris.current.sha ?? '', uri: compareUris.current.documentUri() },
+			lhs: { sha: compareUris.previous.sha ?? '', uri: compareUris.previous.documentUri },
+			rhs: { sha: compareUris.current.sha ?? '', uri: compareUris.current.documentUri },
 			repoPath: commit.repoPath,
 			range: compareUris.range,
 			source: telemetrySource,
@@ -157,9 +157,9 @@ export async function localChangesMessage(
 		message = `[$(compare-changes)](${DiffWithCommand.createMarkdownCommandLink({
 			lhs: {
 				sha: fromCommit.sha,
-				uri: GitUri.fromFile(file, uri.repoPath!, undefined, true).toFileUri(),
+				uri: GitUri.fromFile(file, uri.repoPath!, undefined, true).workingFileUri,
 			},
-			rhs: { sha: '', uri: uri.toFileUri() },
+			rhs: { sha: '', uri: uri.workingFileUri },
 			repoPath: uri.repoPath!,
 			range: editorLineToDiffRange(editorLine),
 			source: telemetrySource,
@@ -240,34 +240,46 @@ export async function detailsMessage(
 			'pullRequestState',
 		);
 
-	const [enrichedAutolinksResult, prResult, presenceResult, previousLineComparisonUrisResult] =
-		await Promise.allSettled([
-			enhancedAutolinks
-				? pauseOnCancelOrTimeoutMapTuplePromise(
-						options?.enrichedAutolinks ?? commit.getEnrichedAutolinks(remote),
-						options?.cancellation,
-						options?.timeout,
-					)
-				: undefined,
-			prs
-				? pauseOnCancelOrTimeout(
-						options?.pullRequest ?? commit.getAssociatedPullRequest(remote),
-						options?.cancellation,
-						options?.timeout,
-					)
-				: undefined,
-			container.vsls.active
-				? pauseOnCancelOrTimeout(
-						container.vsls.getContactPresence(commit.author.email),
-						options?.cancellation,
-						Math.min(options?.timeout ?? 250, 250),
-					)
-				: undefined,
-			commit.isUncommitted
-				? commit.getPreviousComparisonUrisForRange(editorLineToDiffRange(editorLine), uri.sha)
-				: undefined,
-			commit.message == null ? commit.ensureFullDetails() : undefined,
-		]);
+	const showSignature =
+		configuration.get('signing.showSignatureBadges') &&
+		!commit.isUncommitted &&
+		CommitFormatter.has(options.format, 'signature');
+
+	const [
+		enrichedAutolinksResult,
+		prResult,
+		presenceResult,
+		previousLineComparisonUrisResult,
+		_fullDetailsResult,
+		signedResult,
+	] = await Promise.allSettled([
+		enhancedAutolinks
+			? pauseOnCancelOrTimeoutMapTuplePromise(
+					options?.enrichedAutolinks ?? commit.getEnrichedAutolinks(remote),
+					options?.cancellation,
+					options?.timeout,
+				)
+			: undefined,
+		prs
+			? pauseOnCancelOrTimeout(
+					options?.pullRequest ?? commit.getAssociatedPullRequest(remote),
+					options?.cancellation,
+					options?.timeout,
+				)
+			: undefined,
+		container.vsls.active
+			? pauseOnCancelOrTimeout(
+					container.vsls.getContactPresence(commit.author.email),
+					options?.cancellation,
+					Math.min(options?.timeout ?? 250, 250),
+				)
+			: undefined,
+		commit.isUncommitted
+			? commit.getPreviousComparisonUrisForRange(editorLineToDiffRange(editorLine), uri.sha)
+			: undefined,
+		commit.message == null ? commit.ensureFullDetails() : undefined,
+		showSignature ? commit.isSigned() : undefined,
+	]);
 
 	if (options?.cancellation?.isCancellationRequested) return undefined;
 
@@ -275,6 +287,7 @@ export async function detailsMessage(
 	const pr = getSettledValue(prResult);
 	const presence = getSettledValue(presenceResult);
 	const previousLineComparisonUris = getSettledValue(previousLineComparisonUrisResult);
+	const signed = getSettledValue(signedResult);
 
 	const details = await CommitFormatter.fromTemplateAsync(
 		options.format,
@@ -293,6 +306,7 @@ export async function detailsMessage(
 			previousLineComparisonUris: previousLineComparisonUris,
 			outputFormat: 'markdown',
 			remotes: remotes,
+			signed: signed,
 		},
 	);
 

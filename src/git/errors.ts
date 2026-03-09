@@ -685,6 +685,42 @@ export class StashPushError extends GitCommandError<StashPushErrorDetails> {
 	}
 }
 
+export type ShowErrorReason = 'invalidObject' | 'invalidRevision' | 'notFound' | 'notInRevision' | 'other';
+interface ShowErrorDetails {
+	reason?: ShowErrorReason;
+	rev?: string;
+	path?: string;
+	gitCommand?: GitCommandContext;
+}
+
+export class ShowError extends GitCommandError<ShowErrorDetails> {
+	static override is(ex: unknown, reason?: ShowErrorReason): ex is ShowError {
+		return ex instanceof ShowError && (reason == null || ex.details.reason === reason);
+	}
+
+	constructor(details: ShowErrorDetails, original?: Error) {
+		super('Unable to show file', details, original);
+	}
+
+	protected override buildErrorMessage(details: ShowErrorDetails): string {
+		const baseMessage = `Unable to show${details.path ? ` '${details.path}'` : ' file'}${
+			details.rev ? ` at revision '${details.rev}'` : ''
+		}`;
+		switch (details.reason) {
+			case 'invalidObject':
+				return `${baseMessage} because the path is not a file`;
+			case 'invalidRevision':
+				return `${baseMessage} because the specified revision is invalid`;
+			case 'notFound':
+				return `${baseMessage} because the file does not exist`;
+			case 'notInRevision':
+				return `${baseMessage} because the file is not in the specified revision`;
+			default:
+				return baseMessage;
+		}
+	}
+}
+
 export type TagErrorReason =
 	| 'alreadyExists'
 	| 'invalidName'
@@ -793,6 +829,38 @@ export class WorktreeDeleteError extends GitCommandError<WorktreeDeleteErrorDeta
 				return 'Unable to delete worktree because there are uncommitted changes';
 			default:
 				return 'Unable to delete worktree';
+		}
+	}
+}
+
+export type SigningErrorReason = 'noKey' | 'gpgNotFound' | 'sshNotFound' | 'passphraseFailed' | 'unknown';
+interface SigningErrorDetails {
+	reason?: SigningErrorReason;
+	gitCommand?: GitCommandContext;
+}
+
+export class SigningError extends GitCommandError<SigningErrorDetails> {
+	static override is(ex: unknown, reason?: SigningErrorReason): ex is SigningError {
+		return ex instanceof SigningError && (reason == null || ex.details.reason === reason);
+	}
+
+	constructor(details: SigningErrorDetails, original?: Error) {
+		super('Unable to sign commit', details, original);
+	}
+
+	protected override buildErrorMessage(details: SigningErrorDetails): string {
+		const baseMessage = 'Unable to sign commit';
+		switch (details.reason) {
+			case 'noKey':
+				return `${baseMessage} because no signing key is configured`;
+			case 'gpgNotFound':
+				return `${baseMessage} because GPG program was not found`;
+			case 'sshNotFound':
+				return `${baseMessage} because SSH program was not found`;
+			case 'passphraseFailed':
+				return `${baseMessage} because GPG passphrase failed or was cancelled`;
+			default:
+				return baseMessage;
 		}
 	}
 }

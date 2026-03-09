@@ -1,11 +1,11 @@
 import type { ExecFileException, ExecFileOptions } from 'child_process';
 import { exec, execFile, spawn } from 'child_process';
 import type { Stats } from 'fs';
-import { access, constants, existsSync, statSync } from 'fs';
+import { access, constants } from 'fs';
+import { stat } from 'fs/promises';
 import { join as joinPaths } from 'path';
 import * as process from 'process';
-import { Logger } from '../../../system/logger.js';
-import { getLogScope } from '../../../system/logger.scope.js';
+import { getScopedLogger, maybeStartScopedLogger } from '../../../system/logger.scope.js';
 import { normalizePath } from '../../../system/path.js';
 import { CancelledRunError, RunError } from './shell.errors.js';
 
@@ -25,7 +25,7 @@ const jsRegex = /\.(js)$/i;
  *
  * @private
  */
-function runDownPath(exe: string): string {
+async function runDownPath(exe: string): Promise<string> {
 	// NB: Windows won't search PATH looking for executables in spawn like
 	// Posix does
 
@@ -34,18 +34,17 @@ function runDownPath(exe: string): string {
 
 	const target = joinPaths('.', exe);
 	try {
-		const stats = statSync(target);
+		const stats = await stat(target);
 		if (stats?.isFile() && isExecutable(stats)) return target;
 	} catch {}
 
 	const path = process.env.PATH;
 	if (path != null && path.length !== 0) {
 		const haystack = path.split(isWindows ? ';' : ':');
-		let stats;
 		for (const p of haystack) {
 			const needle = joinPaths(p, exe);
 			try {
-				stats = statSync(needle);
+				const stats = await stat(needle);
 				if (stats?.isFile() && isExecutable(stats)) return needle;
 			} catch {}
 		}
@@ -57,8 +56,8 @@ function runDownPath(exe: string): string {
 function isExecutable(stats: Stats) {
 	if (isWindows) return true;
 
-	const isGroup = stats.gid ? process.getgid != null && stats.gid === process.getgid() : true;
-	const isUser = stats.uid ? process.getuid != null && stats.uid === process.getuid() : true;
+	const isGroup = stats.gid ? stats.gid === process.getgid?.() : true;
+	const isUser = stats.uid ? stats.uid === process.getuid?.() : true;
 
 	return Boolean(stats.mode & 0o0001 || (stats.mode & 0o0010 && isGroup) || (stats.mode & 0o0100 && isUser));
 }
@@ -72,19 +71,19 @@ function isExecutable(stats: Stats) {
  * This method also does the work of running down PATH, which spawn on Windows
  * also doesn't do, unlike on POSIX.
  */
-export function findExecutable(exe: string, args: string[]): { cmd: string; args: string[] } {
+export async function findExecutable(exe: string, args: string[]): Promise<{ cmd: string; args: string[] }> {
 	// POSIX can just execute scripts directly, no need for silly goosery
-	if (!isWindows) return { cmd: runDownPath(exe), args: args };
+	if (!isWindows) return { cmd: await runDownPath(exe), args: args };
 
-	if (!existsSync(exe)) {
+	if (!(await fsExists(exe))) {
 		// NB: When you write something like `surf-client ... -- surf-build` on Windows,
 		// a shell would normally convert that to surf-build.cmd, but since it's passed
 		// in as an argument, it doesn't happen
 		const possibleExts = ['.exe', '.bat', '.cmd', '.ps1'];
 		for (const ext of possibleExts) {
-			const possibleFullPath = runDownPath(`${exe}${ext}`);
+			const possibleFullPath = await runDownPath(`${exe}${ext}`);
 
-			if (existsSync(possibleFullPath)) return findExecutable(possibleFullPath, args);
+			if (await fsExists(possibleFullPath)) return findExecutable(possibleFullPath, args);
 		}
 	}
 
@@ -98,7 +97,7 @@ export function findExecutable(exe: string, args: string[]): { cmd: string; args
 		);
 		const psargs = ['-ExecutionPolicy', 'Unrestricted', '-NoLogo', '-NonInteractive', '-File', exe];
 
-		return { cmd: cmd, args: psargs.concat(args) };
+		return { cmd: cmd, args: [...psargs, ...args] };
 	}
 
 	if (batOrCmdRegex.test(exe)) {
@@ -112,7 +111,7 @@ export function findExecutable(exe: string, args: string[]): { cmd: string; args
 		const cmd = process.execPath;
 		const nodeArgs = [exe];
 
-		return { cmd: cmd, args: nodeArgs.concat(args) };
+		return { cmd: cmd, args: [...nodeArgs, ...args] };
 	}
 
 	return { cmd: exe, args: args };
@@ -180,12 +179,14 @@ export function run<T extends number | string>(
 	encoding: BufferEncoding | string,
 	options?: RunOptions<BufferEncoding> & { exitCodeOnly?: boolean },
 ): Promise<T> {
+	const scope = getScopedLogger() ?? maybeStartScopedLogger('Shell.run');
+
 	const { stdin, stdinEncoding, ...opts }: RunOptions<BufferEncoding> & ExecFileOptions = {
 		maxBuffer: 1000 * 1024 * 1024,
 		...options,
 	};
 
-	return new Promise<T>((resolve, reject) => {
+	const promise = new Promise<T>((resolve, reject) => {
 		const proc = execFile(command, args, opts, async (error: ExecFileException | null, stdout, stderr) => {
 			if (options?.exitCodeOnly) {
 				resolve((error?.code ?? proc.exitCode) as T);
@@ -229,8 +230,8 @@ export function run<T extends number | string>(
 				return;
 			}
 
-			if (stderr) {
-				Logger.warn(`Warning(${command} ${args.join(' ')}): ${stderr}`);
+			if (stderr && scope?.enabled('debug')) {
+				scope?.warn(`[SHELL] '${command} ${args.join(' ')}' \u2022 ${stderr}`);
 			}
 
 			if (encoding === 'utf8' || encoding === 'binary' || encoding === 'buffer') {
@@ -245,6 +246,8 @@ export function run<T extends number | string>(
 			proc.stdin?.end(stdin, (stdinEncoding ?? 'utf8') as BufferEncoding);
 		}
 	});
+
+	return promise.finally(() => scope?.[Symbol.dispose]());
 }
 
 export interface RunExitResult {
@@ -274,11 +277,11 @@ export function runSpawn<T extends string | Buffer>(
 	encoding: BufferEncoding | 'buffer' | string,
 	options: RunOptions & { exitCodeOnly?: boolean },
 ): Promise<RunExitResult | RunResult<T>> {
-	const scope = getLogScope();
+	const scope = getScopedLogger() ?? maybeStartScopedLogger('Shell.runSpawn');
 
 	const { stdin, stdinEncoding, ...opts }: RunOptions = options;
 
-	return new Promise<RunExitResult | RunResult<T>>((resolve, reject) => {
+	const promise = new Promise<RunExitResult | RunResult<T>>((resolve, reject) => {
 		const proc = spawn(command, args, opts);
 
 		const stdoutBuffers: Buffer[] = [];
@@ -327,8 +330,8 @@ export function runSpawn<T extends string | Buffer>(
 			if (code !== 0 || signal) {
 				const stdio = getStdio<string>('utf8');
 				const { stdout, stderr } = stdio instanceof Promise ? await stdio : stdio;
-				if (stderr.length) {
-					Logger.warn(scope, `Warning(${command} ${args.join(' ')}): ${stderr}`);
+				if (stderr.length && scope?.enabled('debug')) {
+					scope?.warn(`[SHELL] '${command} ${args.join(' ')}' \u2022 ${stderr}`);
 				}
 
 				if (signal === 'SIGTERM') {
@@ -354,10 +357,9 @@ export function runSpawn<T extends string | Buffer>(
 
 			const stdio = getStdio<T>(encoding);
 			const { stdout, stderr } = stdio instanceof Promise ? await stdio : stdio;
-			if (stderr.length) {
-				Logger.warn(
-					scope,
-					`Warning(${command} ${args.join(' ')}): ${typeof stderr === 'string' ? stderr : stderr.toString()}`,
+			if (stderr.length && scope?.enabled('debug')) {
+				scope?.warn(
+					`[SHELL] '${command} ${args.join(' ')}' \u2022 ${typeof stderr === 'string' ? stderr : stderr.toString()}`,
 				);
 			}
 
@@ -372,6 +374,8 @@ export function runSpawn<T extends string | Buffer>(
 			}
 		}
 	});
+
+	return promise.finally(() => scope?.[Symbol.dispose]());
 }
 
 export async function fsExists(path: string): Promise<boolean> {

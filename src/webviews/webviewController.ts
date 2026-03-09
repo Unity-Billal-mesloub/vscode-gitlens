@@ -31,11 +31,11 @@ import {
 } from '../system/-webview/context.js';
 import { getViewFocusCommand } from '../system/-webview/vscode/views.js';
 import { getScopedCounter } from '../system/counter.js';
-import { debug, logName } from '../system/decorators/log.js';
+import { logName, trace } from '../system/decorators/log.js';
 import { sequentialize } from '../system/decorators/sequentialize.js';
 import { serializeIpcData } from '../system/ipcSerialize.js';
-import { getLoggableName, Logger } from '../system/logger.js';
-import { getLogScope, getNewLogScope, setLogScopeExit } from '../system/logger.scope.js';
+import { getLoggableName } from '../system/logger.js';
+import { getScopedLogger, maybeStartScopedLogger } from '../system/logger.scope.js';
 import { pauseOnCancelOrTimeout } from '../system/promise.js';
 import { maybeStopWatch, Stopwatch } from '../system/stopwatch.js';
 import type { WebviewContext } from '../system/webview.js';
@@ -408,7 +408,7 @@ export class WebviewController<
 		return this.provider.getSplitArgs?.() ?? [];
 	}
 
-	@debug({ args: false })
+	@trace({ args: false })
 	async show(
 		loading: boolean,
 		options?: WebviewShowOptions,
@@ -490,7 +490,7 @@ export class WebviewController<
 		return this.webview.asWebviewUri(uri);
 	}
 
-	@debug()
+	@trace()
 	async refresh(force?: boolean): Promise<void> {
 		this.cancellation?.cancel();
 		this.cancellation = new CancellationTokenSource();
@@ -532,19 +532,19 @@ export class WebviewController<
 		this.webview.html = html;
 	}
 
-	@debug()
+	@trace()
 	private onParentDisposed() {
 		this.dispose();
 	}
 
-	@debug<WebviewController<ID, State>['onMessageReceivedCore']>({
-		args: { 0: e => (e != null ? `${e.id}, method=${e.method}` : '<undefined>') },
+	@trace({
+		args: e => ({ e: e != null ? `${e.id}, method=${e.method}` : '<undefined>' }),
 	})
 	private async onMessageReceivedCore(e: IpcMessage) {
 		if (e == null) return;
 
-		const scope = getLogScope();
-		setLogScopeExit(scope, ` \u2022 ipc (webview -> host) duration=${Date.now() - e.timestamp}ms`);
+		const scope = getScopedLogger();
+		scope?.addExitInfo(`ipc (webview -> host) duration=${Date.now() - e.timestamp}ms`);
 
 		switch (true) {
 			case WebviewReadyRequest.is(e):
@@ -597,15 +597,15 @@ export class WebviewController<
 		}
 	}
 
-	@debug<WebviewController<ID, State>['onViewFocusChanged']>({
-		args: { 0: e => `focused=${e.focused}, inputFocused=${e.inputFocused}` },
+	@trace({
+		args: e => ({ e: `focused=${e.focused}, inputFocused=${e.inputFocused}` }),
 	})
 	onViewFocusChanged(e: WebviewFocusChangedParams): void {
 		setContextKeys(this.descriptor.contextKeyPrefix);
 		this.handleFocusChanged(e.focused);
 	}
 
-	@debug()
+	@trace()
 	private onParentVisibilityChanged(visible: boolean, active?: boolean, forceReload?: boolean) {
 		if (this.descriptor.webviewHostOptions?.retainContextWhenHidden !== true) {
 			if (visible) {
@@ -669,23 +669,19 @@ export class WebviewController<
 
 	private _webRoot: string | undefined;
 	getWebRoot(): string {
-		if (this._webRoot == null) {
-			this._webRoot = this.asWebviewUri(this.getWebRootUri()).toString();
-		}
+		this._webRoot ??= this.asWebviewUri(this.getWebRootUri()).toString();
 		return this._webRoot;
 	}
 
 	private _webRootUri: Uri | undefined;
 	getWebRootUri(): Uri {
-		if (this._webRootUri == null) {
-			this._webRootUri = Uri.joinPath(this.getRootUri(), 'dist', 'webviews');
-		}
+		this._webRootUri ??= Uri.joinPath(this.getRootUri(), 'dist', 'webviews');
 		return this._webRootUri;
 	}
 
-	@debug({ args: false })
+	@trace({ args: false })
 	private async getHtml(webview: Webview): Promise<string> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const webRootUri = this.getWebRootUri();
 		const uri = Uri.joinPath(webRootUri, this.descriptor.fileName);
@@ -698,7 +694,7 @@ export class WebviewController<
 			this.provider.includeEndOfBody?.(),
 		]);
 
-		const sw = maybeStopWatch(scope, { log: false, logLevel: 'debug' });
+		const sw = maybeStopWatch(scope, { log: { onlyExit: true, level: 'debug' } });
 		const serialized = this.serializeIpcData(bootstrap);
 		sw?.stop({ message: `\u2022 serialized bootstrap; length=${serialized.length}` });
 
@@ -731,8 +727,8 @@ export class WebviewController<
 		const id = this.nextIpcId();
 		const timestamp = Date.now();
 
-		const scope = getNewLogScope(`${getLoggableName(this)}.notify(${id}|${notificationType.method})`, true);
-		const sw = maybeStopWatch(scope, { log: false, logLevel: 'debug' });
+		using scope = maybeStartScopedLogger(`${getLoggableName(this)}.notify(${id}|${notificationType.method})`);
+		const sw = maybeStopWatch(scope, { log: { onlyExit: true, level: 'debug' } });
 
 		const serializedParams = params != null ? this.serializeIpcData(params) : undefined;
 
@@ -756,7 +752,7 @@ export class WebviewController<
 			} catch (ex) {
 				debugger;
 				// Compression failed, keep uncompressed data
-				Logger.error(ex, scope, 'IPC deflate compression failed');
+				scope?.error(ex, 'IPC deflate compression failed');
 				sw?.stop({
 					message: `\u2022 failed deflate compression, using uncompressed data`,
 					suffix: `failed`,
@@ -833,13 +829,15 @@ export class WebviewController<
 	}
 
 	@sequentialize()
-	@debug<WebviewController<ID, State>['postMessage']>({
-		args: { 0: m => `${m.id}|${m.method}${m.completionId ? `+${m.completionId}` : ''}` },
+	@trace({
+		args: message => ({
+			message: `${message.id}|${message.method}${message.completionId ? `+${message.completionId}` : ''}`,
+		}),
 	})
 	private async postMessage(message: IpcMessage): Promise<boolean> {
 		if (!this._ready) return Promise.resolve(false);
 
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 		let timeout: ReturnType<typeof setTimeout> | undefined;
 
 		// It looks like there is a bug where `postMessage` can sometimes just hang infinitely. Not sure why, but ensure we don't hang forever
@@ -851,7 +849,7 @@ export class WebviewController<
 				},
 				(ex: unknown) => {
 					clearTimeout(timeout);
-					Logger.error(ex, scope);
+					scope?.error(ex);
 					debugger;
 					return false;
 				},
@@ -859,7 +857,7 @@ export class WebviewController<
 			new Promise<boolean>(resolve => {
 				timeout = setTimeout(() => {
 					debugger;
-					setLogScopeExit(scope, undefined, 'TIMEDOUT');
+					scope?.setFailed('TIMEDOUT');
 					resolve(false);
 				}, 30000);
 			}),
@@ -945,6 +943,9 @@ export class WebviewController<
 	}
 }
 
+const htmlTokensRegex =
+	/#{(head|body|endOfBody|webviewId|webviewInstanceId|placement|cspSource|cspNonce|root|webroot|state)}/g;
+
 export function replaceWebviewHtmlTokens<SerializedState>(
 	html: string,
 	webviewId: string,
@@ -959,45 +960,42 @@ export function replaceWebviewHtmlTokens<SerializedState>(
 	body?: string,
 	endOfBody?: string,
 ): string {
-	return html.replace(
-		/#{(head|body|endOfBody|webviewId|webviewInstanceId|placement|cspSource|cspNonce|root|webroot|state)}/g,
-		(_substring: string, token: string) => {
-			switch (token) {
-				case 'head':
-					return head ?? '';
-				case 'body':
-					return body ?? '';
-				case 'state':
-					return bootstrap != null
-						? base64(typeof bootstrap === 'string' ? bootstrap : JSON.stringify(bootstrap))
-						: '';
-				case 'endOfBody':
-					return `${
-						bootstrap != null
-							? `<script type="text/javascript" nonce="${cspNonce}">window.bootstrap=${
-									typeof bootstrap === 'string' ? bootstrap : JSON.stringify(bootstrap)
-								};</script>`
-							: ''
-					}${endOfBody ?? ''}`;
-				case 'webviewId':
-					return webviewId;
-				case 'webviewInstanceId':
-					return webviewInstanceId ?? '';
-				case 'placement':
-					return placement;
-				case 'cspSource':
-					return cspSource;
-				case 'cspNonce':
-					return cspNonce;
-				case 'root':
-					return root;
-				case 'webroot':
-					return webRoot;
-				default:
-					return '';
-			}
-		},
-	);
+	return html.replace(htmlTokensRegex, (_substring: string, token: string) => {
+		switch (token) {
+			case 'head':
+				return head ?? '';
+			case 'body':
+				return body ?? '';
+			case 'state':
+				return bootstrap != null
+					? base64(typeof bootstrap === 'string' ? bootstrap : JSON.stringify(bootstrap))
+					: '';
+			case 'endOfBody':
+				return `${
+					bootstrap != null
+						? `<script type="text/javascript" nonce="${cspNonce}">window.bootstrap=${
+								typeof bootstrap === 'string' ? bootstrap : JSON.stringify(bootstrap)
+							};</script>`
+						: ''
+				}${endOfBody ?? ''}`;
+			case 'webviewId':
+				return webviewId;
+			case 'webviewInstanceId':
+				return webviewInstanceId ?? '';
+			case 'placement':
+				return placement;
+			case 'cspSource':
+				return cspSource;
+			case 'cspNonce':
+				return cspNonce;
+			case 'root':
+				return root;
+			case 'webroot':
+				return webRoot;
+			default:
+				return '';
+		}
+	});
 }
 
 export function resetContextKeys(

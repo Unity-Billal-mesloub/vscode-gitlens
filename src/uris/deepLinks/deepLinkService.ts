@@ -1,6 +1,7 @@
 import type { QuickPickItem, SecretStorageChangeEvent } from 'vscode';
 import { Disposable, env, EventEmitter, ProgressLocation, Range, Uri, window, workspace } from 'vscode';
 import { fromBase64ToString } from '@env/base64.js';
+import type { OpenChatActionCommandArgs } from '../../commands/openChatAction.js';
 import type { OpenCloudPatchCommandArgs } from '../../commands/patches.js';
 import { isIntegrationId, isSupportedCloudIntegrationId } from '../../constants.integrations.js';
 import type { StoredDeepLinkContext, StoredNamedRef } from '../../constants.storage.js';
@@ -11,7 +12,6 @@ import type { GitBranch } from '../../git/models/branch.js';
 import type { GitCommit } from '../../git/models/commit.js';
 import type { GitReference } from '../../git/models/reference.js';
 import type { Repository, RepositoryChangeEvent } from '../../git/models/repository.js';
-import { RepositoryChange, RepositoryChangeComparisonMode } from '../../git/models/repository.js';
 import type { RepositoryIdentity } from '../../git/models/repositoryIdentities.js';
 import { missingRepositoryId } from '../../git/models/repositoryIdentities.js';
 import type { GitTag } from '../../git/models/tag.js';
@@ -27,9 +27,10 @@ import { configuration } from '../../system/-webview/configuration.js';
 import { getOrOpenTextEditor } from '../../system/-webview/vscode/editors.js';
 import type { OpenWorkspaceLocation } from '../../system/-webview/vscode/workspaces.js';
 import { openWorkspace } from '../../system/-webview/vscode/workspaces.js';
-import { debug } from '../../system/decorators/log.js';
+import { trace } from '../../system/decorators/log.js';
 import { once } from '../../system/event.js';
 import { Logger } from '../../system/logger.js';
+import { getScopedLogger } from '../../system/logger.scope.js';
 import { maybeUri, normalizePath } from '../../system/path.js';
 import { isWalkthroughSupported } from '../../telemetry/walkthroughStateProvider.js';
 import { showInspectView } from '../../webviews/commitDetails/actions.js';
@@ -128,11 +129,15 @@ export class DeepLinkService implements Disposable {
 			secondaryRemoteUrl: undefined,
 			targetType: undefined,
 			targetSha: undefined,
+			secondaryTargetSha: undefined,
 			action: undefined,
 			repoOpenLocation: undefined,
 			repoOpenUri: undefined,
 			params: undefined,
 			currentBranch: undefined,
+			prData: undefined,
+			issueData: undefined,
+			instructions: undefined,
 		};
 	}
 
@@ -236,6 +241,10 @@ export class DeepLinkService implements Disposable {
 
 				return DeepLinkServiceAction.DeepLinkErrored;
 			}
+			case DeepLinkServiceState.StartReview:
+				return DeepLinkServiceAction.StartReview;
+			case DeepLinkServiceState.StartWork:
+				return DeepLinkServiceAction.StartWork;
 			default:
 				return DeepLinkServiceAction.DeepLinkErrored;
 		}
@@ -303,11 +312,15 @@ export class DeepLinkService implements Disposable {
 		}
 	}
 
-	@debug()
+	@trace()
 	private async processPendingDeepLink(pendingDeepLink: StoredDeepLinkContext | undefined) {
+		const scope = getScopedLogger();
+
 		if (pendingDeepLink == null) return;
+
 		void this.container.storage.deleteSecret('deepLinks:pending');
 		if (pendingDeepLink?.url == null) return;
+
 		const link = parseDeepLinkUri(Uri.parse(pendingDeepLink.url));
 		if (link == null) return;
 
@@ -316,6 +329,17 @@ export class DeepLinkService implements Disposable {
 		this._context.targetSha = pendingDeepLink.targetSha;
 		this._context.secondaryTargetSha = pendingDeepLink.secondaryTargetSha;
 		this._context.repoPath = pendingDeepLink.repoPath;
+		try {
+			this._context.prData = pendingDeepLink.prData != null ? JSON.parse(pendingDeepLink.prData) : undefined;
+		} catch {
+			Logger.warn(scope, `Failed to parse pending deep link PR data: ${pendingDeepLink.prData}`);
+		}
+		try {
+			this._context.issueData =
+				pendingDeepLink.issueData != null ? JSON.parse(pendingDeepLink.issueData) : undefined;
+		} catch {
+			Logger.warn(scope, `Failed to parse pending deep link issue data: ${pendingDeepLink.issueData}`);
+		}
 
 		if (this.container.git.isDiscoveringRepositories) {
 			await this.container.git.isDiscoveringRepositories;
@@ -573,7 +597,7 @@ export class DeepLinkService implements Disposable {
 	// TODO @axosoft-ramint: Move all the logic for matching a repo, prompting to add repo, matching remote, etc. for a target (branch, PR, etc.)
 	// to a separate service where it can be used outside of the context of deep linking. Then the deep link service should leverage it,
 	// and we should stop using deep links to process things like Launchpad switch actions, Open in Worktree command, etc.
-	@debug()
+	@trace()
 	private async processDeepLink(
 		initialAction: DeepLinkServiceAction = DeepLinkServiceAction.DeepLinkEventFired,
 		useProgress: boolean = true,
@@ -831,14 +855,12 @@ export class DeepLinkService implements Disposable {
 						}
 					}
 
-					if (repoOpenType == null) {
-						repoOpenType = await this.showOpenTypePrompt({
-							customMessage:
-								chosenRepoPath === 'Choose a different location'
-									? 'Please choose an option to open the repository'
-									: undefined,
-						});
-					}
+					repoOpenType ??= await this.showOpenTypePrompt({
+						customMessage:
+							chosenRepoPath === 'Choose a different location'
+								? 'Please choose an option to open the repository'
+								: undefined,
+					});
 
 					if (!repoOpenType) {
 						action = DeepLinkServiceAction.DeepLinkCancelled;
@@ -852,21 +874,19 @@ export class DeepLinkService implements Disposable {
 					}
 					this._context.repoOpenLocation = repoOpenLocation;
 
-					if (this._context.repoOpenUri == null) {
-						this._context.repoOpenUri = (
-							await window.showOpenDialog({
-								title: `Choose a ${repoOpenType === 'workspace' ? 'workspace' : 'folder'} to ${
-									repoOpenType === 'clone' ? 'clone the repository to' : 'open the repository'
-								}`,
-								canSelectFiles: repoOpenType === 'workspace',
-								canSelectFolders: repoOpenType !== 'workspace',
-								canSelectMany: false,
-								...(repoOpenType === 'workspace' && {
-									filters: { Workspaces: ['code-workspace'] },
-								}),
-							})
-						)?.[0];
-					}
+					this._context.repoOpenUri ??= (
+						await window.showOpenDialog({
+							title: `Choose a ${repoOpenType === 'workspace' ? 'workspace' : 'folder'} to ${
+								repoOpenType === 'clone' ? 'clone the repository to' : 'open the repository'
+							}`,
+							canSelectFiles: repoOpenType === 'workspace',
+							canSelectFolders: repoOpenType !== 'workspace',
+							canSelectMany: false,
+							...(repoOpenType === 'workspace' && {
+								filters: { Workspaces: ['code-workspace'] },
+							}),
+						})
+					)?.[0];
 
 					if (!this._context.repoOpenUri) {
 						action = DeepLinkServiceAction.DeepLinkCancelled;
@@ -935,7 +955,9 @@ export class DeepLinkService implements Disposable {
 					}
 
 					if (remoteUrl && !remote) {
-						const matchingRemotes = await repo.git.remotes.getRemotes({ filter: r => r.url === remoteUrl });
+						const matchingRemotes = await repo.git.remotes.getRemotes({
+							filter: r => r.matches(remoteUrl),
+						});
 						if (matchingRemotes.length > 0) {
 							this._context.remote = matchingRemotes[0];
 						}
@@ -943,7 +965,7 @@ export class DeepLinkService implements Disposable {
 
 					if (secondaryRemoteUrl && !secondaryRemote) {
 						const matchingRemotes = await repo.git.remotes.getRemotes({
-							filter: r => r.url === secondaryRemoteUrl,
+							filter: r => r.matches(secondaryRemoteUrl),
 						});
 						if (matchingRemotes.length > 0) {
 							this._context.secondaryRemote = matchingRemotes[0];
@@ -1370,10 +1392,7 @@ export class DeepLinkService implements Disposable {
 						const targetBranch = await this.getBranch(targetId);
 						if (
 							currentBranch != null &&
-							targetBranch != null &&
-							// TODO: When we create a new local branch during switch, it should set its upstream to the original remote branch target.
-							// Then this can be updated to just check the upstream of `currentBranch`.
-							currentBranch.getNameWithoutRemote() === targetBranch.getNameWithoutRemote()
+							currentBranch.getNameWithoutRemote() === targetBranch?.getNameWithoutRemote()
 						) {
 							skipSwitch = true;
 						}
@@ -1434,10 +1453,10 @@ export class DeepLinkService implements Disposable {
 						// Only proceed if the branch switch occurred in the current window. This is necessary because the switch flow may
 						// open a new window, and if it does, we need to end things here.
 						const didChangeBranch = await Promise.race([
-							new Promise<boolean>(resolve => setTimeout(() => resolve(false), 10000)),
+							new Promise<boolean>(resolve => setTimeout(resolve, 10000, false)),
 							new Promise<boolean>(resolve =>
 								once(repo.onDidChange)(async (e: RepositoryChangeEvent) => {
-									if (e.changed(RepositoryChange.Head, RepositoryChangeComparisonMode.Any)) {
+									if (e.changed('head')) {
 										if (
 											(await repo.git.branches.getBranch())?.name !== this._context.currentBranch
 										) {
@@ -1538,6 +1557,17 @@ export class DeepLinkService implements Disposable {
 						break;
 					}
 
+					// Handle special command types that need custom processing
+					if (mainId === DeepLinkCommandType.StartReview) {
+						action = DeepLinkServiceAction.StartReview;
+						break;
+					}
+
+					if (mainId === DeepLinkCommandType.StartWork) {
+						action = DeepLinkServiceAction.StartWork;
+						break;
+					}
+
 					const command = DeepLinkCommandTypeToCommand.get(mainId);
 					if (command == null) {
 						action = DeepLinkServiceAction.DeepLinkErrored;
@@ -1610,6 +1640,69 @@ export class DeepLinkService implements Disposable {
 						source != null ? { source: 'deeplink', detail: source } : { source: 'deeplink' },
 					);
 					action = DeepLinkServiceAction.DeepLinkResolved;
+					break;
+				}
+				case DeepLinkServiceState.StartReview: {
+					// Get PR data from context
+					const pr = this._context.prData;
+					if (!pr) {
+						action = DeepLinkServiceAction.DeepLinkErrored;
+						message = 'Missing PR data.';
+						break;
+					}
+
+					// Open all the changes in the PR
+					const prHeadRef = pr.refs?.head;
+					const prBaseRef = pr.refs?.base;
+					if (repoPath && prHeadRef && prBaseRef) {
+						await openComparisonChanges(
+							this.container,
+							{
+								repoPath: repoPath,
+								lhs: prBaseRef.sha,
+								rhs: prHeadRef.sha,
+							},
+							{ title: `Changes in Pull Request ${pr.title ? `"${pr.title}"` : `#${pr.id}`}` },
+						);
+					}
+
+					try {
+						await executeCommand('gitlens.openChatAction', {
+							chatAction: {
+								type: 'startReview',
+								pr: pr,
+								instructions: this._context.instructions,
+							},
+						} as OpenChatActionCommandArgs);
+						action = DeepLinkServiceAction.DeepLinkResolved;
+					} catch (ex) {
+						action = DeepLinkServiceAction.DeepLinkErrored;
+						message = `Failed to start review: ${ex instanceof Error ? ex.message : String(ex)}`;
+					}
+					break;
+				}
+				case DeepLinkServiceState.StartWork: {
+					// Get issue data from context
+					const issue = this._context.issueData;
+					if (!issue) {
+						action = DeepLinkServiceAction.DeepLinkErrored;
+						message = 'Missing issue data.';
+						break;
+					}
+
+					try {
+						await executeCommand('gitlens.openChatAction', {
+							chatAction: {
+								type: 'startWork',
+								issue: issue,
+								instructions: this._context.instructions,
+							},
+						} as OpenChatActionCommandArgs);
+						action = DeepLinkServiceAction.DeepLinkResolved;
+					} catch (ex) {
+						action = DeepLinkServiceAction.DeepLinkErrored;
+						message = `Failed to start work: ${ex instanceof Error ? ex.message : String(ex)}`;
+					}
 					break;
 				}
 

@@ -58,7 +58,7 @@ export async function* pickRepositoryStep<
 		(await context.container.git.getOrOpenRepositoryForEditor());
 
 	let repos = context.repos;
-	const grouped = await groupRepositories(repos);
+	const grouped = groupRepositories(repos);
 	if (options?.excludeWorktrees) {
 		repos = sortRepositories([...grouped.keys()]);
 	} else {
@@ -135,7 +135,7 @@ export async function* pickRepositoriesStep<
 	}
 
 	let repos = context.repos;
-	const grouped = await groupRepositories(repos);
+	const grouped = groupRepositories(repos);
 	if (options?.excludeWorktrees) {
 		repos = sortRepositories([...grouped.keys()]);
 	} else {
@@ -308,15 +308,17 @@ function getShowRepositoryStatusStepItems<
 
 	if (context.status.files.length) {
 		items.push(
-			new OpenChangedFilesCommandQuickPickItem(
-				computed.stagedAddsAndChanges.concat(computed.unstagedAddsAndChanges),
-			),
+			new OpenChangedFilesCommandQuickPickItem([
+				...computed.stagedAddsAndChanges,
+				...computed.unstagedAddsAndChanges,
+			]),
 		);
 
 		items.push(
-			new OpenOnlyChangedFilesCommandQuickPickItem(
-				computed.stagedAddsAndChanges.concat(computed.unstagedAddsAndChanges),
-			),
+			new OpenOnlyChangedFilesCommandQuickPickItem([
+				...computed.stagedAddsAndChanges,
+				...computed.unstagedAddsAndChanges,
+			]),
 		);
 	}
 

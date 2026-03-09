@@ -1,7 +1,6 @@
 import type { AIProviderAndModel, SupportedAIModels } from './constants.ai.js';
 import type { GroupableTreeViewTypes } from './constants.views.js';
 import type { DateTimeFormat } from './system/date.js';
-import type { LogLevel } from './system/logger.constants.js';
 
 export interface Config {
 	readonly advanced: AdvancedConfig;
@@ -37,13 +36,13 @@ export interface Config {
 	readonly menus: boolean | MenuConfig;
 	readonly mode: ModeConfig;
 	readonly modes: ModesConfig | null;
-	readonly outputLevel: OutputLevel;
 	readonly partners: PartnersConfig | null;
 	readonly plusFeatures: PlusFeaturesConfig;
 	readonly proxy: ProxyConfig | null;
 	readonly rebaseEditor: RebaseEditorConfig;
 	readonly remotes: RemotesConfig[] | null;
 	readonly showWhatsNewAfterUpgrades: boolean;
+	readonly signing: SigningConfig;
 	readonly sortBranchesBy: BranchSorting;
 	readonly sortContributorsBy: ContributorSorting;
 	readonly sortTagsBy: TagSorting;
@@ -127,12 +126,6 @@ export type GravatarDefaultStyle = 'wavatar' | 'identicon' | 'monsterid' | 'mp' 
 export type HeatmapLocations = 'gutter' | 'line' | 'overview';
 export type KeyMap = 'alternate' | 'chorded' | 'none';
 
-type DeprecatedOutputLevel =
-	| /** @deprecated use `off` */ 'silent'
-	| /** @deprecated use `error` */ 'errors'
-	| /** @deprecated use `info` */ 'verbose';
-export type OutputLevel = LogLevel | DeprecatedOutputLevel;
-
 export type StatusBarCommands =
 	| 'gitlens.copyRemoteCommitUrl'
 	| 'gitlens.copyRemoteFileUrl'
@@ -201,7 +194,10 @@ export interface AdvancedConfig {
 	readonly fileHistoryFollowsRenames: boolean;
 	readonly fileHistoryShowAllBranches: boolean;
 	readonly fileHistoryShowMergeCommits: boolean;
-	readonly gitTimeout: number;
+	readonly git: {
+		readonly timeout: number;
+		readonly maxConcurrentProcesses: number;
+	};
 	readonly maxListItems: number;
 	readonly maxSearchItems: number;
 	readonly messages: { [key in SuppressedMessages]: boolean };
@@ -402,6 +398,9 @@ interface GitKrakenConfig {
 
 interface GitKrakenCliConfig {
 	readonly integration: {
+		readonly enabled: boolean;
+	};
+	readonly insiders: {
 		readonly enabled: boolean;
 	};
 }
@@ -708,6 +707,11 @@ export interface RemotesUrlsConfig {
 	readonly fileInCommit: string;
 	readonly fileLine: string;
 	readonly fileRange: string;
+}
+
+interface SigningConfig {
+	readonly showSignatureBadges: boolean;
+	readonly enableKeyGeneration: boolean;
 }
 
 interface StatusBarConfig {
@@ -1087,19 +1091,6 @@ interface WorktreesConfig {
 	readonly promptForLocation: boolean;
 }
 
-export function fromOutputLevel(level: OutputLevel): LogLevel {
-	switch (level) {
-		case /** @deprecated use `off` */ 'silent':
-			return 'off';
-		case /** @deprecated use `error` */ 'errors':
-			return 'error';
-		case /** @deprecated use `info` */ 'verbose':
-			return 'info';
-		default:
-			return level;
-	}
-}
-
 export type CoreConfig = {
 	readonly editor: {
 		readonly letterSpacing: number;
@@ -1111,6 +1102,7 @@ export type CoreConfig = {
 	readonly git: {
 		readonly autoRepositoryDetection: boolean | 'subFolders' | 'openEditors';
 		readonly enabled: boolean;
+		readonly enableCommitSigning: boolean;
 		readonly fetchOnPull: boolean;
 		readonly path: string | string[] | null;
 		readonly pullTags: boolean;

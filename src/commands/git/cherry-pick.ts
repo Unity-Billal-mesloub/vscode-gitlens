@@ -84,6 +84,8 @@ export class CherryPickGitCommand extends QuickCommand<State> {
 	}
 
 	private async execute(state: StepState<State<Repository, GitReference[]>>) {
+		this.container.telemetry.sendEvent('gitCommand/run', { command: 'cherry-pick' });
+
 		try {
 			await state.repo.git.ops?.cherryPick?.(
 				state.references.map(c => c.ref),
@@ -95,7 +97,7 @@ export class CherryPickGitCommand extends QuickCommand<State> {
 		} catch (ex) {
 			// Don't show an error message if the user intentionally aborted the cherry-pick
 			if (CherryPickError.is(ex, 'aborted')) {
-				Logger.log(ex.message, this.title);
+				Logger.debug(ex.message, this.title);
 				return;
 			}
 
@@ -109,6 +111,7 @@ export class CherryPickGitCommand extends QuickCommand<State> {
 			}
 
 			if (CherryPickError.is(ex, 'conflicts')) {
+				this.container.telemetry.sendEvent('gitCommand/conflict', { command: 'cherry-pick' });
 				void window.showWarningMessage(
 					'Unable to cherry-pick due to conflicts. Resolve the conflicts before continuing, or abort the cherry-pick.',
 				);

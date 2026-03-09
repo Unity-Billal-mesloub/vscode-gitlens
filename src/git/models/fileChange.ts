@@ -1,5 +1,6 @@
 import type { Uri } from 'vscode';
 import type { Container } from '../../container.js';
+import { loggable } from '../../system/decorators/log.js';
 import { memoize } from '../../system/decorators/memoize.js';
 import { pluralize } from '../../system/string.js';
 import type { DiffRange } from '../gitProvider.js';
@@ -17,8 +18,14 @@ export interface GitFileChangeShape {
 
 	readonly originalPath?: string | undefined;
 	readonly staged?: boolean;
+
+	/** Git file mode (e.g., 100644=regular, 100755=executable, 120000=symlink, 160000=submodule) */
+	readonly mode?: string | undefined;
+	/** For submodule (gitlink) entries, contains the submodule's commit SHAs */
+	readonly submodule?: { readonly oid: string; readonly previousOid?: string } | undefined;
 }
 
+@loggable(i => i.path)
 export class GitFileChange implements GitFileChangeShape {
 	constructor(
 		private readonly container: Container,
@@ -30,6 +37,8 @@ export class GitFileChange implements GitFileChangeShape {
 		public readonly stats?: GitFileChangeStats | undefined,
 		public readonly staged?: boolean,
 		public readonly range?: DiffRange | undefined,
+		public readonly mode?: string | undefined,
+		public readonly submodule?: { readonly oid: string; readonly previousOid?: string } | undefined,
 	) {}
 
 	get hasConflicts(): boolean {
@@ -46,6 +55,11 @@ export class GitFileChange implements GitFileChangeShape {
 			default:
 				return false;
 		}
+	}
+
+	/** Indicates this is a submodule (gitlink) rather than a regular file */
+	get isSubmodule(): boolean {
+		return this.submodule != null;
 	}
 
 	@memoize()

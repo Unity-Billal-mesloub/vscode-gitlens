@@ -82,6 +82,13 @@ export async function getHostExecutablePath(): Promise<string> {
 
 	switch (platform) {
 		case 'windows':
+			_hostExecutablePath =
+				// VS Code 1.110+ restructured its install directory, adding a commit-hash directory level (Windows only)
+				(await checkPath(joinPaths(env.appRoot, '..', '..', '..', 'bin', app))) ??
+				(await checkPath(joinPaths(env.appRoot, '..', '..', 'bin', app))) ??
+				(await checkPath(joinPaths(env.appRoot, 'bin', app))) ??
+				app;
+			break;
 		case 'linux':
 			_hostExecutablePath =
 				(await checkPath(joinPaths(env.appRoot, '..', '..', 'bin', app))) ??
@@ -104,7 +111,12 @@ export async function getHostExecutablePath(): Promise<string> {
 export async function getHostEditorCommand(includeWorkspaceUri: boolean = false): Promise<string> {
 	const path = normalizePath(await getHostExecutablePath()).replace(/ /g, '\\ ');
 	if (includeWorkspaceUri) {
-		const uri = workspace.workspaceFile ?? workspace.workspaceFolders?.[0]?.uri;
+		let uri = workspace.workspaceFile;
+		if (uri != null) {
+			return `${path} --wait --reuse-window --file-uri="${uri.toString()}"`;
+		}
+
+		uri = workspace.workspaceFolders?.[0]?.uri;
 		if (uri != null) {
 			return `${path} --wait --reuse-window --folder-uri="${uri.toString()}"`;
 		}
@@ -162,10 +174,12 @@ export async function revealInFileExplorer(uri: Uri): Promise<void> {
 	void (await executeCoreCommand('revealFileInOS', uri));
 }
 
-export function supportedInVSCodeVersion(feature: 'language-models'): boolean {
+export function supportedInVSCodeVersion(feature: 'language-models' | 'quickpick-resourceuri'): boolean {
 	switch (feature) {
 		case 'language-models':
 			return satisfies(codeVersion, '>= 1.90-insider');
+		case 'quickpick-resourceuri':
+			return satisfies(codeVersion, '>= 1.108');
 		default:
 			return false;
 	}

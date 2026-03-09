@@ -52,10 +52,9 @@ import { getTagId } from '../../../../git/utils/tag.utils.js';
 import { isUserMatch } from '../../../../git/utils/user.utils.js';
 import { getWorktreeId } from '../../../../git/utils/worktree.utils.js';
 import { configuration } from '../../../../system/-webview/configuration.js';
-import { log } from '../../../../system/decorators/log.js';
+import { debug } from '../../../../system/decorators/log.js';
 import { find, first, join, last } from '../../../../system/iterable.js';
-import { Logger } from '../../../../system/logger.js';
-import { getLogScope } from '../../../../system/logger.scope.js';
+import { getScopedLogger } from '../../../../system/logger.scope.js';
 import { getSettledValue } from '../../../../system/promise.js';
 import { createDisposable, mixinDisposable } from '../../../../system/unifiedDisposable.js';
 import { serializeWebviewItemContext } from '../../../../system/webview.js';
@@ -81,7 +80,7 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 		private readonly provider: LocalGitProviderInternal,
 	) {}
 
-	@log()
+	@debug()
 	async getGraph(
 		repoPath: string,
 		rev: string | undefined,
@@ -89,7 +88,7 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 		options?: { include?: { stats?: boolean }; limit?: number },
 		cancellation?: CancellationToken,
 	): Promise<GitGraph> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const defaultLimit = options?.limit ?? configuration.get('graph.defaultItemLimit') ?? 5000;
 		const ordering = configuration.get('graph.commitOrdering', undefined, 'date');
@@ -354,9 +353,7 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 										group = { remotes: [] };
 										groupedRefs.set(branchName, group);
 									}
-									if (group.remotes == null) {
-										group.remotes = [];
-									}
+									group.remotes ??= [];
 									group.remotes.push(context.webviewItemValue.ref);
 
 									continue;
@@ -434,9 +431,7 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 								group.remotes != null &&
 								((group.local != null && group.remotes.length > 0) || group.remotes.length > 1)
 							) {
-								if (contexts.refGroups == null) {
-									contexts.refGroups = {};
-								}
+								contexts.refGroups ??= {};
 								contexts.refGroups[groupName] = serializeWebviewItemContext<GraphItemRefGroupContext>({
 									webviewItemGroup: `gitlens:refGroup${group.head ? '+current' : ''}`,
 									webviewItemGroupValue: {
@@ -509,7 +504,7 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 							remotes: refRemoteHeads,
 							tags: refTags,
 							contexts: contexts,
-							reachableFromBranches: branches ? Array.from(branches) : undefined,
+							reachableFromBranches: branches ? [...branches] : undefined,
 						});
 
 						if (stash.stats != null) {
@@ -568,7 +563,7 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 							remotes: refRemoteHeads,
 							tags: refTags,
 							contexts: contexts,
-							reachableFromBranches: branches ? Array.from(branches) : undefined,
+							reachableFromBranches: branches ? [...branches] : undefined,
 						});
 
 						if (commit.stats != null) {
@@ -656,7 +651,7 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 						getCommitsForGraphCore.call(this, limit, sha, cursor, cancellation),
 				};
 			} catch (ex) {
-				Logger.error(ex, scope);
+				scope?.error(ex);
 				debugger;
 
 				throw ex;
@@ -666,14 +661,14 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 		return getCommitsForGraphCore.call(this, defaultLimit, selectSha, undefined, cancellation);
 	}
 
-	@log<GraphGitSubProvider['searchGraph']>({
-		args: {
-			1: s =>
-				`[${s.matchAll ? 'A' : ''}${s.matchCase ? 'C' : ''}${s.matchRegex ? 'R' : ''}${s.matchWholeWord ? 'W' : ''}]: ${
-					s.query.length > 500 ? `${s.query.substring(0, 500)}...` : s.query
-				}`,
-			2: o => `limit=${o?.limit}, ordering=${o?.ordering}`,
-		},
+	@debug({
+		args: (repoPath, s, o) => ({
+			repoPath: repoPath,
+			search: `[${s.matchAll ? 'A' : ''}${s.matchCase ? 'C' : ''}${s.matchRegex ? 'R' : ''}${s.matchWholeWord ? 'W' : ''}]: ${
+				s.query.length > 500 ? `${s.query.substring(0, 500)}...` : s.query
+			}`,
+			options: `limit=${o?.limit}, ordering=${o?.ordering}`,
+		}),
 	})
 	async *searchGraph(
 		repoPath: string,
@@ -684,15 +679,15 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 		return yield* this.searchGraphCore(repoPath, search, undefined, undefined, options, cancellation);
 	}
 
-	@log<GraphGitSubProvider['continueSearchGraph']>({
-		args: {
-			1: c =>
-				`[${c.search.matchAll ? 'A' : ''}${c.search.matchCase ? 'C' : ''}${c.search.matchRegex ? 'R' : ''}${c.search.matchWholeWord ? 'W' : ''}]: ${
-					c.search.query.length > 500 ? `${c.search.query.substring(0, 500)}...` : c.search.query
-				} (continue)`,
-			2: r => `results=${r.size}`,
-			3: o => `limit=${o?.limit}`,
-		},
+	@debug({
+		args: (repoPath, c, r, o) => ({
+			repoPath: repoPath,
+			cursor: `[${c.search.matchAll ? 'A' : ''}${c.search.matchCase ? 'C' : ''}${c.search.matchRegex ? 'R' : ''}${c.search.matchWholeWord ? 'W' : ''}]: ${
+				c.search.query.length > 500 ? `${c.search.query.substring(0, 500)}...` : c.search.query
+			} (continue)`,
+			existingResults: `results=${r.size}`,
+			options: `limit=${o?.limit}`,
+		}),
 	})
 	async *continueSearchGraph(
 		repoPath: string,
@@ -816,6 +811,7 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 						break;
 					}
 
+					count++;
 					if (limit && count > limit) {
 						hasMore = true;
 
@@ -823,7 +819,6 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 						break;
 					}
 
-					count++;
 					sha = remappedIds.get(r.sha) ?? r.sha;
 					if (results.has(sha) || (stashesOnly && !stashes?.has(sha)) || (tipsOnly && !r.tips)) {
 						continue;

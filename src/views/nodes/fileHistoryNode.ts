@@ -3,18 +3,17 @@ import type { GitUri } from '../../git/gitUri.js';
 import type { GitBranch } from '../../git/models/branch.js';
 import type { GitLog } from '../../git/models/log.js';
 import type { RepositoryChangeEvent, RepositoryFileSystemChangeEvent } from '../../git/models/repository.js';
-import { RepositoryChange, RepositoryChangeComparisonMode } from '../../git/models/repository.js';
 import { deletedOrMissing } from '../../git/models/revision.js';
 import { getBranchAheadRange } from '../../git/utils/-webview/branch.utils.js';
 import { configuration } from '../../system/-webview/configuration.js';
 import { getFolderGlobUri } from '../../system/-webview/path.js';
 import { gate } from '../../system/decorators/gate.js';
-import { debug } from '../../system/decorators/log.js';
+import { trace } from '../../system/decorators/log.js';
 import { memoize } from '../../system/decorators/memoize.js';
 import { weakEvent } from '../../system/event.js';
 import { filterMap, flatMap, map, some, uniqueBy } from '../../system/iterable.js';
-import { getLoggableName, Logger } from '../../system/logger.js';
-import { startLogScope } from '../../system/logger.scope.js';
+import { getLoggableName } from '../../system/logger.js';
+import { maybeStartScopedLogger } from '../../system/logger.scope.js';
 import { basename } from '../../system/path.js';
 import { getSettledValue } from '../../system/promise.js';
 import type { FileHistoryView } from '../fileHistoryView.js';
@@ -100,7 +99,7 @@ export class FileHistoryNode
 		}`;
 	}
 
-	@debug()
+	@trace()
 	protected subscribe(): Disposable | undefined {
 		const repo = this.view.container.git.getRepository(this.uri);
 		if (repo == null) return undefined;
@@ -127,22 +126,12 @@ export class FileHistoryNode
 	}
 
 	private onRepositoryChanged(e: RepositoryChangeEvent) {
-		if (
-			!e.changed(
-				RepositoryChange.Index,
-				RepositoryChange.Heads,
-				RepositoryChange.Remotes,
-				RepositoryChange.RemoteProviders,
-				RepositoryChange.PausedOperationStatus,
-				RepositoryChange.Unknown,
-				RepositoryChangeComparisonMode.Any,
-			)
-		) {
+		if (!e.changed('index', 'heads', 'remotes', 'remoteProviders', 'pausedOp', 'unknown')) {
 			return;
 		}
 
-		using scope = startLogScope(`${getLoggableName(this)}.onRepositoryChanged(e=${e.toString()})`, false);
-		Logger.debug(scope, 'triggering node refresh');
+		using scope = maybeStartScopedLogger(`${getLoggableName(this)}.onRepositoryChanged(e=${e.toString()})`);
+		scope?.trace('triggering node refresh');
 
 		void this.triggerChange(true);
 	}
@@ -154,16 +143,15 @@ export class FileHistoryNode
 			return;
 		}
 
-		using scope = startLogScope(
+		using scope = maybeStartScopedLogger(
 			`${getLoggableName(this)}.onFileSystemChanged(e=${this.uri.toString(true)})`,
-			false,
 		);
-		Logger.debug(scope, 'triggering node refresh');
+		scope?.trace('triggering node refresh');
 
 		void this.triggerChange(true);
 	}
 
-	@debug()
+	@trace()
 	override refresh(reset: boolean = false): void | { cancel: boolean } | Promise<void | { cancel: boolean }> {
 		if (reset) {
 			this._log = undefined;
@@ -322,7 +310,7 @@ export class FileHistoryNode
 			);
 
 			if (log.hasMore) {
-				children.push(new LoadMoreNode(this.view, this, children[children.length - 1]));
+				children.push(new LoadMoreNode(this.view, this, children.at(-1)!));
 			}
 		}
 

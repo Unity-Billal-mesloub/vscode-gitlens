@@ -4,10 +4,9 @@ import { git } from '@env/providers.js';
 import type { LiveShare, SharedService } from '../@types/vsls.d.js';
 import type { Container } from '../container.js';
 import { isVslsRoot } from '../system/-webview/path.vsls.js';
-import { debug, log } from '../system/decorators/log.js';
+import { debug, trace } from '../system/decorators/log.js';
 import { join } from '../system/iterable.js';
-import { Logger } from '../system/logger.js';
-import { getLogScope } from '../system/logger.scope.js';
+import { getScopedLogger } from '../system/logger.scope.js';
 import { normalizePath } from '../system/path.js';
 import type {
 	GetRepositoriesForUriRequest,
@@ -52,7 +51,7 @@ const slash = 47; //CharCode.Slash;
 export class VslsHostService implements Disposable {
 	static ServiceId = 'proxy';
 
-	@log()
+	@debug()
 	static async share(api: LiveShare, container: Container): Promise<VslsHostService> {
 		const service = await api.shareService(this.ServiceId);
 		if (service == null) {
@@ -105,16 +104,16 @@ export class VslsHostService implements Disposable {
 		});
 	}
 
-	@log()
+	@debug()
 	private onAvailabilityChanged(_available: boolean) {
 		// TODO
 	}
 
-	@debug()
+	@trace()
 	private onWorkspaceFoldersChanged(_e?: WorkspaceFoldersChangeEvent) {
 		if (workspace.workspaceFolders == null || workspace.workspaceFolders.length === 0) return;
 
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		this._localToSharedPaths.clear();
 		this._sharedToLocalPaths.clear();
@@ -125,7 +124,7 @@ export class VslsHostService implements Disposable {
 			localPath = normalizePath(f.uri.fsPath);
 			sharedPath = normalizePath(this.convertLocalUriToShared(f.uri).toString());
 
-			Logger.debug(scope, `shared='${sharedPath}' \u2194 local='${localPath}'`);
+			scope?.trace(`shared='${sharedPath}' \u2194 local='${localPath}'`);
 			this._localToSharedPaths.set(localPath, sharedPath);
 			this._sharedToLocalPaths.set(sharedPath, localPath);
 		}
@@ -139,7 +138,7 @@ export class VslsHostService implements Disposable {
 		this._sharedPathsRegex = new RegExp(`^(${sharedPaths})`, 'i');
 	}
 
-	@log()
+	@debug()
 	private async onGitCommandRequest(
 		request: GitCommandRequest,
 		cancellation: CancellationToken,
@@ -161,7 +160,7 @@ export class VslsHostService implements Disposable {
 			if (this._localPathsRegex != null && data.length > 0) {
 				data = data.replace(this._localPathsRegex, (_match, local: string) => {
 					const shared = this._localToSharedPaths.get(normalizePath(local));
-					return shared != null ? shared : local;
+					return shared ?? local;
 				});
 			}
 
@@ -171,7 +170,7 @@ export class VslsHostService implements Disposable {
 		return { data: data.toString('binary'), isBuffer: true };
 	}
 
-	@log()
+	@debug()
 	// eslint-disable-next-line @typescript-eslint/require-await
 	private async onGetRepositoriesForUriRequest(
 		request: GetRepositoriesForUriRequest,
@@ -195,15 +194,12 @@ export class VslsHostService implements Disposable {
 		return { repositories: repositories };
 	}
 
-	@debug({ exit: true })
+	@trace({ exit: true })
 	private convertLocalUriToShared(localUri: Uri) {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		let sharedUri = this._api.convertLocalUriToShared(localUri);
-		Logger.debug(
-			scope,
-			`LiveShare.convertLocalUriToShared(${localUri.toString(true)}) returned ${sharedUri.toString(true)}`,
-		);
+		scope?.addExitInfo(`returned ${sharedUri.toString(true)}`);
 
 		const localPath = localUri.path;
 		let sharedPath = sharedUri.path;
@@ -242,7 +238,7 @@ export class VslsHostService implements Disposable {
 					}
 
 					const local = this._sharedToLocalPaths.get(shared);
-					return local != null ? local : shared;
+					return local ?? shared;
 				});
 			} else if (leadingSlashRegex.test(cwd)) {
 				const localCwd = this._sharedToLocalPaths.get('vsls:/~0');
@@ -280,7 +276,7 @@ export class VslsHostService implements Disposable {
 						1,
 						normalizePath(arg).replace(this._sharedPathsRegex, (_match, shared: string) => {
 							const local = this._sharedToLocalPaths.get(shared);
-							return local != null ? local : shared;
+							return local ?? shared;
 						}),
 					);
 				}

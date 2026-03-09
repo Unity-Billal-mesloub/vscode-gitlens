@@ -5,6 +5,7 @@ ignoredBuiltDependencies:
     - '@playwright/browser-chromium'
     - '@swc/core'
     - '@vscode/vsce-sign'
+    - es5-ext
     - esbuild
     - keytar
     - protobufjs
@@ -19,3 +20,7 @@ minimumReleaseAgeExclude:
     - '@eamodio/*'
     - '@gitkraken/*'
     - '@vscode/*'
+    - 'lint-staged@16.3.2'
+
+patchedDependencies:
+    fantasticon@4.1.0: patches/fantasticon@4.1.0.patch

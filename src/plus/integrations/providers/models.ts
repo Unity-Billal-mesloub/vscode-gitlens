@@ -63,6 +63,7 @@ import {
 	PullRequestStatusCheckRollupState,
 } from '../../../git/models/pullRequest.js';
 import type { Provider, ProviderReference } from '../../../git/models/remoteProvider.js';
+import { gitSuffixRegex } from '../../../git/parsers/remoteParser.js';
 import { equalsIgnoreCase } from '../../../system/string.js';
 import type { EnrichableItem } from '../../launchpad/models/enrichedItem.js';
 import type { Integration, IntegrationType } from '../models/integration.js';
@@ -333,8 +334,8 @@ export type GetAzureProjectsForResourceFn = (
 	input: { namespace: string; cursor?: string },
 	options?: EnterpriseOptions,
 ) => Promise<{ data: AzureProject[]; pageInfo?: PageInfo }>;
-export type GetBitbucketResourcesForUserFn = (
-	input: { userId: string },
+export type GetBitbucketResourcesForCurrentUserFn = (
+	input: Record<string, never>,
 	options?: EnterpriseOptions,
 ) => Promise<{ data: BitbucketWorkspaceStub[] }>;
 export type GetBitbucketPullRequestsAuthoredByUserForWorkspaceFn = (
@@ -386,7 +387,7 @@ export interface ProviderInfo extends ProviderMetadata {
 	getLinearOrganizationFn?: GetLinearOrganizationFn;
 	getLinearTeamsForCurrentUserFn?: GetLinearTeamsForCurrentUserFn;
 	getAzureResourcesForUserFn?: GetAzureResourcesForUserFn;
-	getBitbucketResourcesForUserFn?: GetBitbucketResourcesForUserFn;
+	getBitbucketResourcesForCurrentUserFn?: GetBitbucketResourcesForCurrentUserFn;
 	getBitbucketPullRequestsAuthoredByUserForWorkspaceFn?: GetBitbucketPullRequestsAuthoredByUserForWorkspaceFn;
 	getBitbucketServerPullRequestsForCurrentUserFn?: GetBitbucketServerPullRequestsForCurrentUserFn;
 	getJiraProjectsForResourcesFn?: GetJiraProjectsForResourcesFn;
@@ -864,6 +865,7 @@ export function toProviderPullRequest(pr: PullRequest): ProviderPullRequest {
 		graphQLId: pr.nodeId,
 		number: Number.parseInt(pr.id, 10),
 		title: pr.title,
+		description: null,
 		url: pr.url,
 		state: toProviderPullRequestState(pr.state),
 		isDraft: pr.isDraft ?? false,
@@ -993,7 +995,7 @@ export function fromProviderPullRequest(
 				owner: pr.repository.owner.login,
 				exists: pr.baseRef != null,
 				url: pr.repository.remoteInfo?.cloneUrlHTTPS
-					? pr.repository.remoteInfo.cloneUrlHTTPS.replace(/\.git$/, '')
+					? pr.repository.remoteInfo.cloneUrlHTTPS.replace(gitSuffixRegex, '')
 					: '',
 			},
 			head: {
@@ -1003,7 +1005,7 @@ export function fromProviderPullRequest(
 				owner: pr.headRepository?.owner.login ?? '',
 				exists: pr.headRef != null,
 				url: pr.headRepository?.remoteInfo?.cloneUrlHTTPS
-					? pr.headRepository.remoteInfo.cloneUrlHTTPS.replace(/\.git$/, '')
+					? pr.headRepository.remoteInfo.cloneUrlHTTPS.replace(gitSuffixRegex, '')
 					: '',
 			},
 			isCrossRepository: pr.headRepository?.id !== pr.repository.id,

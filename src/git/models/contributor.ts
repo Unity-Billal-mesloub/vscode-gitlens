@@ -3,6 +3,7 @@ import { Uri } from 'vscode';
 import { getAvatarUri } from '../../avatars.js';
 import type { GravatarDefaultStyle } from '../../config.js';
 import { formatDate, fromNow } from '../../system/date.js';
+import { loggable } from '../../system/decorators/log.js';
 import { memoize } from '../../system/decorators/memoize.js';
 import type { GitCommitStats } from './commit.js';
 
@@ -10,6 +11,7 @@ export function isContributor(contributor: unknown): contributor is GitContribut
 	return contributor instanceof GitContributor;
 }
 
+@loggable(i => i.name)
 export class GitContributor {
 	constructor(
 		public readonly repoPath: string,
@@ -30,7 +32,7 @@ export class GitContributor {
 		return this.name ?? this.username!;
 	}
 
-	@memoize<GitContributor['formatDate']>(format => format ?? 'MMMM Do, YYYY h:mma')
+	@memoize<GitContributor['formatDate']>({ resolver: format => format ?? 'MMMM Do, YYYY h:mma' })
 	formatDate(format?: string | null): string {
 		return this.latestCommitDate != null ? formatDate(this.latestCommitDate, format ?? 'MMMM Do, YYYY h:mma') : '';
 	}
@@ -47,6 +49,26 @@ export class GitContributor {
 
 	getCoauthor(): string {
 		return `${this.name}${this.email ? ` <${this.email}>` : ''}`;
+	}
+
+	/** Creates a copy of this contributor with a different repoPath — ONLY used for worktree-aware caching */
+	withRepoPath(repoPath: string): GitContributor {
+		return repoPath === this.repoPath
+			? this
+			: new GitContributor(
+					repoPath,
+					this.name,
+					this.email,
+					this.current,
+					this.contributionCount,
+					this.contributions,
+					this.latestCommitDate,
+					this.firstCommitDate,
+					this.stats,
+					this.username,
+					this.avatarUrl,
+					this.id,
+				);
 	}
 }
 

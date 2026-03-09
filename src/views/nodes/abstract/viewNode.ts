@@ -1,6 +1,7 @@
 import type { CancellationToken, Command, Disposable, Event, TreeItem } from 'vscode';
 import type { TreeViewNodeTypes, TreeViewTypes } from '../../../constants.views.js';
 import type { GitUri } from '../../../git/gitUri.js';
+import { unknownGitUri } from '../../../git/gitUri.js';
 import type { GitBranch } from '../../../git/models/branch.js';
 import type { GitCommit } from '../../../git/models/commit.js';
 import type { GitContributor } from '../../../git/models/contributor.js';
@@ -27,10 +28,9 @@ import type {
 	LocalWorkspace,
 	LocalWorkspaceRepositoryDescriptor,
 } from '../../../plus/workspaces/models/localWorkspace.js';
-import { debug, logName } from '../../../system/decorators/log.js';
+import { loggable, logName, trace } from '../../../system/decorators/log.js';
 import { sequentialize } from '../../../system/decorators/sequentialize.js';
 import { is as isA } from '../../../system/function.js';
-import { getLoggableName } from '../../../system/logger.js';
 import type { View } from '../../viewBase.js';
 import type { BranchTrackingStatus } from '../branchTrackingStatusNode.js';
 import type { TreeViewNodesByType } from '../utils/-webview/node.utils.js';
@@ -218,7 +218,11 @@ export function getViewNodeId(type: string, context: AmbientContext): string {
 
 export type ClipboardType = 'text' | 'markdown';
 
-@logName<ViewNode>((c, name) => `${name}${c.id != null ? `(${c.id})` : ''}`)
+@logName(
+	(c, name) =>
+		`${name}${c.id != null || (c.uri != null && c.uri !== unknownGitUri) ? `(${c.id ?? c.uri.toString()})` : ''}`,
+)
+@loggable()
 export abstract class ViewNode<
 	Type extends TreeViewNodeTypes = TreeViewNodeTypes,
 	TView extends View = View,
@@ -294,10 +298,6 @@ export abstract class ViewNode<
 	getUrl?(): string | Promise<string | undefined> | undefined;
 	toClipboard?(type?: ClipboardType): string | Promise<string>;
 
-	toString(): string {
-		return getLoggableName(this);
-	}
-
 	protected _uri: GitUri;
 	get uri(): GitUri {
 		return this._uri;
@@ -321,7 +321,7 @@ export abstract class ViewNode<
 	refresh?(reset?: boolean): void | { cancel: boolean } | Promise<void | { cancel: boolean }>;
 
 	@sequentialize()
-	@debug()
+	@trace()
 	triggerChange(reset: boolean = false, force: boolean = false, avoidSelf?: ViewNode): Promise<void> {
 		if (this._disposed) return Promise.resolve();
 

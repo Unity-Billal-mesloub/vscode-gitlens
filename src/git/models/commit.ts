@@ -8,9 +8,9 @@ import type { Container } from '../../container.js';
 import { ensureArray } from '../../system/array.js';
 import { formatDate, fromNow } from '../../system/date.js';
 import { gate } from '../../system/decorators/gate.js';
+import { loggable } from '../../system/decorators/log.js';
 import { memoize } from '../../system/decorators/memoize.js';
 import { Lazy } from '../../system/lazy.js';
-import { getLoggableName } from '../../system/logger.js';
 import { getSettledValue } from '../../system/promise.js';
 import { pluralize } from '../../system/string.js';
 import type { DiffRange, PreviousRangeComparisonUrisResult } from '../gitProvider.js';
@@ -32,6 +32,7 @@ import type { GitRevisionReference, GitStashReference } from './reference.js';
 import type { GitRemote } from './remote.js';
 import type { Repository } from './repository.js';
 import { uncommitted, uncommittedStaged } from './revision.js';
+import type { CommitSignature } from './signature.js';
 
 const stashNumberRegex = /stash@{(\d+)}/;
 
@@ -54,9 +55,12 @@ export interface GitCommitFileset {
 		| undefined;
 }
 
+@loggable(i => `${i.repoPath}|${i.shortSha}`)
 export class GitCommit implements GitRevisionReference {
 	private _stashUntrackedFilesLoaded = false;
 	private _recomputeStats = false;
+	private _signature: CommitSignature | undefined | null;
+	private _signed: boolean | undefined;
 
 	readonly lines: GitCommitLine[];
 	readonly ref: string;
@@ -128,10 +132,6 @@ export class GitCommit implements GitRevisionReference {
 		this.lines = ensureArray(lines) ?? [];
 	}
 
-	toString(): string {
-		return `${getLoggableName(this)}(${this.repoPath}|${this.shortSha})`;
-	}
-
 	get date(): Date {
 		return this.container.CommitDateFormatting.dateSource === 'committed' ? this.committer.date : this.author.date;
 	}
@@ -197,6 +197,8 @@ export class GitCommit implements GitRevisionReference {
 				file.stats ?? current?.stats,
 				file.staged ?? current?.staged,
 				file.range ?? current?.range,
+				file.mode ?? current?.mode,
+				file.submodule ?? current?.submodule,
 			);
 		});
 	}
@@ -586,6 +588,28 @@ export class GitCommit implements GitRevisionReference {
 		return this.author.getCachedAvatarUri(options);
 	}
 
+	async getSignature(): Promise<CommitSignature | undefined> {
+		if (this.isUncommitted) return undefined;
+		if (this._signature === null) return undefined;
+		if (this._signature !== undefined) return this._signature;
+
+		// Fetch signature from git
+		this._signature =
+			(await this.container.git.getRepositoryService(this.repoPath).commits.getCommitSignature?.(this.sha)) ??
+			null;
+
+		return this._signature ?? undefined;
+	}
+
+	async isSigned(): Promise<boolean> {
+		if (this.isUncommitted) return false;
+		if (this._signed != null) return this._signed;
+
+		this._signed =
+			(await this.container.git.getRepositoryService(this.repoPath).commits.isCommitSigned?.(this.sha)) ?? false;
+		return this._signed;
+	}
+
 	async getCommitForFile(file: string | GitFile, staged?: boolean): Promise<GitCommit | undefined> {
 		const path = typeof file === 'string' ? this.container.git.getRelativePath(file, this.repoPath) : file.path;
 		const foundFile = await this.findFile(path, staged);
@@ -627,7 +651,9 @@ export class GitCommit implements GitRevisionReference {
 		});
 	}
 
-	@memoize<GitCommit['getPreviousComparisonUrisForRange']>((r, rev) => `${r.startLine}-${r.endLine}|${rev ?? ''}`)
+	@memoize<GitCommit['getPreviousComparisonUrisForRange']>({
+		resolver: (r, rev) => `${r.startLine}-${r.endLine}|${rev ?? ''}`,
+	})
 	getPreviousComparisonUrisForRange(
 		range: DiffRange,
 		rev?: string,
@@ -639,6 +665,7 @@ export class GitCommit implements GitRevisionReference {
 						this.file.uri,
 						rev ?? (this.sha === uncommitted ? undefined : this.sha),
 						range,
+						this.isUncommitted ? { skipFirstRev: false } : undefined,
 					)
 			: Promise.resolve(undefined);
 	}
@@ -721,6 +748,32 @@ export class GitCommit implements GitRevisionReference {
 		) as T;
 	}
 
+	/**
+	 * Creates a copy of this commit with a different repoPath.
+	 * Used for worktree-aware caching where shared data needs per-worktree IDs.
+	 */
+	withRepoPath<T extends GitCommit>(repoPath: string): T {
+		return repoPath === this.repoPath
+			? (this as unknown as T)
+			: (new GitCommit(
+					this.container,
+					repoPath,
+					this.sha,
+					this.author,
+					this.committer,
+					this.summary,
+					this.parents,
+					this.message,
+					this.fileset,
+					this.stats,
+					this.lines,
+					this.tips,
+					this.stashName,
+					this.stashOnRef,
+					this.parentTimestamps,
+				) as T);
+	}
+
 	protected getChangedValue<T>(change: T | null | undefined, original: T | undefined): T | undefined {
 		return change === undefined ? original : change === null ? undefined : change;
 	}
@@ -732,6 +785,7 @@ export interface GitCommitIdentityShape {
 	readonly date: Date;
 }
 
+@loggable<GitCommitIdentity>(i => i.name)
 export class GitCommitIdentity implements GitCommitIdentityShape {
 	constructor(
 		public readonly name: string,
@@ -740,7 +794,7 @@ export class GitCommitIdentity implements GitCommitIdentityShape {
 		private readonly avatarUrl?: string | undefined,
 	) {}
 
-	@memoize<GitCommitIdentity['formatDate']>(format => format ?? 'MMMM Do, YYYY h:mma')
+	@memoize<GitCommitIdentity['formatDate']>({ resolver: format => format ?? 'MMMM Do, YYYY h:mma' })
 	formatDate(format?: string | null): string {
 		return formatDate(this.date, format ?? 'MMMM Do, YYYY h:mma');
 	}

@@ -127,8 +127,6 @@ export type GlobalStorage = GlobalStorageCore & GlobalStorageDynamic;
  */
 export interface GlobalScopedStorage {
 	'gk:cli:install': StoredGkCLIInstallInfo;
-	'gk:cli:corePath': string;
-	'gk:cli:path': string;
 }
 
 export interface StoredGkCLIInstallInfo {
@@ -194,8 +192,16 @@ interface WorkspaceStorageCore {
 	'views:scm:grouped:selected': GroupableTreeViewTypes;
 }
 
+/**
+ * Repository filter values:
+ * - `undefined` or `'all'` - show all repositories (new code should set `'all'`)
+ * - `'exclude-worktrees'` - show all except linked worktrees (worktrees whose main repo is also open)
+ * - `string[]` - show only the specified repository IDs
+ */
+export type RepositoryFilterValue = 'all' | 'exclude-worktrees' | string[] | undefined;
+
 type WorkspaceStorageDynamic = Record<IntegrationConnectedKey, boolean> &
-	Record<`views:${TreeViewTypes}:repositoryFilter`, string[] | undefined> &
+	Record<`views:${TreeViewTypes}:repositoryFilter`, RepositoryFilterValue> &
 	Record<`graph:searchHistory:${string}`, StoredGraphSearchHistory[]>;
 
 export type WorkspaceStorage = WorkspaceStorageCore & WorkspaceStorageDynamic;
@@ -347,6 +353,9 @@ export interface StoredDeepLinkContext {
 	secondaryTargetSha?: string | undefined;
 	useProgress?: boolean | undefined;
 	state?: DeepLinkServiceState | undefined;
+	prData?: string | undefined;
+	issueData?: string | undefined;
+	instructions?: string | undefined;
 }
 
 export interface StoredGraphColumn {

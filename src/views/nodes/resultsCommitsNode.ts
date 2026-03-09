@@ -7,10 +7,10 @@ import type { CommitsQueryResults, FilesQueryResults } from '../../git/queryResu
 import { getChangesForChangelog } from '../../git/utils/-webview/log.utils.js';
 import type { AIGenerateChangelogChanges } from '../../plus/ai/actions/generateChangelog.js';
 import { configuration } from '../../system/-webview/configuration.js';
-import { debug } from '../../system/decorators/log.js';
+import { trace } from '../../system/decorators/log.js';
 import { map } from '../../system/iterable.js';
-import { getLoggableName, Logger } from '../../system/logger.js';
-import { getNewLogScope } from '../../system/logger.scope.js';
+import { getLoggableName } from '../../system/logger.js';
+import { maybeStartScopedLogger } from '../../system/logger.scope.js';
 import type { Deferred } from '../../system/promise.js';
 import { defer, pauseOnCancelOrTimeout } from '../../system/promise.js';
 import type { ViewsWithCommits } from '../viewBase.js';
@@ -154,7 +154,7 @@ export class ResultsCommitsNodeBase<Type extends TreeViewNodeTypes, View extends
 		);
 
 		if (log.hasMore) {
-			children.push(new LoadMoreNode(this.view, this, children[children.length - 1]));
+			children.push(new LoadMoreNode(this.view, this, children.at(-1)!));
 		}
 
 		this._onChildrenCompleted?.fulfill();
@@ -184,12 +184,12 @@ export class ResultsCommitsNodeBase<Type extends TreeViewNodeTypes, View extends
 						: TreeItemCollapsibleState.Collapsed;
 			} else {
 				queueMicrotask(async () => {
-					const scope = getNewLogScope(`${getLoggableName(this)}.getTreeItem`, true);
+					using scope = maybeStartScopedLogger(`${getLoggableName(this)}.getTreeItem`);
 					try {
 						if (this._onChildrenCompleted?.promise != null) {
 							const timeout = new Promise<void>(resolve => {
 								setTimeout(() => {
-									Logger.error(undefined, scope, 'onChildrenCompleted promise timed out after 30s');
+									scope?.error(undefined, 'onChildrenCompleted promise timed out after 30s');
 									resolve();
 								}, 30000); // 30 second timeout
 							});
@@ -200,7 +200,7 @@ export class ResultsCommitsNodeBase<Type extends TreeViewNodeTypes, View extends
 						void (await result.value);
 						this.view.triggerNodeChange(this.parent);
 					} catch (ex) {
-						Logger.error(ex, scope, 'Failed awaiting children completion');
+						scope?.error(ex, 'Failed awaiting children completion');
 					}
 				});
 
@@ -219,7 +219,7 @@ export class ResultsCommitsNodeBase<Type extends TreeViewNodeTypes, View extends
 		return item;
 	}
 
-	@debug()
+	@trace()
 	override refresh(reset: boolean = false): void {
 		if (reset) {
 			this._commitsQueryResultsPromise = undefined;

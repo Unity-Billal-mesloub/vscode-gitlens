@@ -1,4 +1,5 @@
-.claude
+!.claude/settings.json
+.claude/worktrees/**
 .DS_Store
 .eslintcache*
 **/.vscode-clean/**
@@ -15,3 +16,4 @@ product.json
 tsconfig*.tsbuildinfo
 *.code-workspace
 localdev*.instructions.md
+*.log

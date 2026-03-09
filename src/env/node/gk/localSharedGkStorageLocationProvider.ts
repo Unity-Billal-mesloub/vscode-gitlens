@@ -4,11 +4,11 @@ import { env } from 'process';
 import { Uri, workspace } from 'vscode';
 import type { Container } from '../../../container.js';
 import type { SharedGkStorageLocationProvider } from '../../../plus/repos/sharedGkStorageLocationProvider.js';
-import { log } from '../../../system/decorators/log.js';
+import { debug } from '../../../system/decorators/log.js';
 import type { Lazy } from '../../../system/lazy.js';
 import { lazy } from '../../../system/lazy.js';
-import { getLoggableName, Logger } from '../../../system/logger.js';
-import { getLogScope, startLogScope } from '../../../system/logger.scope.js';
+import { getLoggableName } from '../../../system/logger.js';
+import { getScopedLogger, maybeStartScopedLogger } from '../../../system/logger.scope.js';
 import { wait } from '../../../system/promise.js';
 import type { UnifiedAsyncDisposable } from '../../../system/unifiedDisposable.js';
 import { createAsyncDisposable } from '../../../system/unifiedDisposable.js';
@@ -19,7 +19,7 @@ export class LocalSharedGkStorageLocationProvider implements SharedGkStorageLoca
 
 	constructor(private readonly container: Container) {
 		this._lazySharedGKUri = lazy(async () => {
-			using scope = startLogScope(`${getLoggableName(this)}.load`, false);
+			using scope = maybeStartScopedLogger(`${getLoggableName(this)}.load`);
 
 			/** Deprecated prefer using XDG paths */
 			const legacySharedGKPath = join(homedir(), '.gk');
@@ -48,13 +48,13 @@ export class LocalSharedGkStorageLocationProvider implements SharedGkStorageLoca
 
 				if (path) {
 					path = join(path, 'gk');
-					Logger.log(scope, `Using shared GK path: ${path}`);
+					scope?.info(`Using shared GK path: ${path}`);
 				}
 			}
 
 			if (path) return Uri.file(path);
 
-			Logger.log(scope, `Using legacy shared GK path: ${legacySharedGKPath}`);
+			scope?.info(`Using legacy shared GK path: ${legacySharedGKPath}`);
 			return legacySharedGKUri;
 		});
 	}
@@ -63,9 +63,9 @@ export class LocalSharedGkStorageLocationProvider implements SharedGkStorageLoca
 		return Uri.joinPath(await this._lazySharedGKUri.value, relativeFilePath);
 	}
 
-	@log()
+	@debug()
 	async acquireSharedStorageWriteLock(): Promise<UnifiedAsyncDisposable | undefined> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const lockFileUri = await this.getUri('lockfile');
 
@@ -92,23 +92,23 @@ export class LocalSharedGkStorageLocationProvider implements SharedGkStorageLoca
 			// write the lockfile to the shared data folder
 			await workspace.fs.writeFile(lockFileUri, new Uint8Array(0));
 		} catch (ex) {
-			Logger.error(ex, scope, `Failed to acquire lock: ${lockFileUri.toString(true)}`);
+			scope?.error(ex, `Failed to acquire lock: ${lockFileUri.toString(true)}`);
 			return undefined;
 		}
 
 		return createAsyncDisposable(() => this.releaseSharedStorageWriteLock());
 	}
 
-	@log()
+	@debug()
 	async releaseSharedStorageWriteLock(): Promise<boolean> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const lockFileUri = await this.getUri('lockfile');
 
 		try {
 			await workspace.fs.delete(lockFileUri);
 		} catch (ex) {
-			Logger.error(ex, scope, `Failed to release lock: ${lockFileUri.toString(true)}`);
+			scope?.error(ex, `Failed to release lock: ${lockFileUri.toString(true)}`);
 			return false;
 		}
 

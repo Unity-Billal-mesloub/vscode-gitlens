@@ -550,7 +550,7 @@ export class GlGraphMinimap extends GlElement {
 		this._chart = undefined!;
 	}
 
-	@debug({ singleLine: true })
+	@debug({ onlyExit: true })
 	private handleDataChanged(markerChanged: boolean) {
 		if (this._loadTimer) {
 			clearTimeout(this._loadTimer);
@@ -724,7 +724,7 @@ export class GlGraphMinimap extends GlElement {
 		this._loading ??= this.loadChartCore().finally(() => (this._loading = undefined));
 	}
 
-	@debug({ singleLine: true })
+	@debug({ onlyExit: true })
 	private async loadChartCore() {
 		if (!this.data?.size) {
 			// Hide spinner if data is an empty Map (no commits), show if data is undefined (still loading)

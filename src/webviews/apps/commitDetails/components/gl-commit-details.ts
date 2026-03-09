@@ -232,12 +232,17 @@ export class GlCommitDetails extends GlDetailsBase {
 					${when(
 						!this.isStash,
 						() => html`
-							<gl-commit-author
-								name="${details.author.name}"
-								url="${details.author.email ? `mailto:${details.author.email}` : undefined}"
-								.avatarUrl="${details.author.avatar ?? ''}"
-								.showAvatar="${this.preferences?.avatars ?? true}"
-							></gl-commit-author>
+							<div class="message-block-group">
+								<gl-commit-author
+									.avatarUrl="${details.author.avatar ?? ''}"
+									.committerEmail="${details.committer.email}"
+									email="${details.author.email}"
+									name="${details.author.name}"
+									.showAvatar="${this.preferences?.avatars ?? true}"
+									.showSignature="${this.preferences?.showSignatureBadges ?? true}"
+									.signature="${this._enriched?.signature}"
+								></gl-commit-author>
+							</div>
 						`,
 					)}
 					${this.renderExplainChanges()}
@@ -562,7 +567,14 @@ export class GlCommitDetails extends GlDetailsBase {
 	}
 
 	private onExplainChanges(e: MouseEvent | KeyboardEvent) {
-		if (this.explainBusy === true || (e instanceof KeyboardEvent && e.key !== 'Enter')) {
+		if (e instanceof KeyboardEvent) {
+			// Only handle Enter/Space for activation, let other keys (like Tab) pass through
+			if (e.key !== 'Enter' && e.key !== ' ') return;
+			if (this.explainBusy) {
+				e.preventDefault();
+				return;
+			}
+		} else if (this.explainBusy) {
 			e.preventDefault();
 			e.stopPropagation();
 			return;
@@ -588,11 +600,11 @@ export class GlCommitDetails extends GlDetailsBase {
 		></commit-stats>`;
 	}
 
-	override getFileActions(_file: File, _options?: Partial<TreeItemBase>): TreeItemAction[] {
+	override getFileActions(file: File, _options?: Partial<TreeItemBase>): TreeItemAction[] {
 		const actions = [
 			{
 				icon: 'go-to-file',
-				label: 'Open file',
+				label: 'Open File',
 				action: 'file-open',
 			},
 		];
@@ -607,10 +619,10 @@ export class GlCommitDetails extends GlDetailsBase {
 			action: 'file-compare-working',
 		});
 
-		if (!this.isStash) {
+		if (!this.isStash && file.submodule == null) {
 			actions.push({
 				icon: 'globe',
-				label: 'Open on remote',
+				label: 'Open on Remote',
 				action: 'file-open-on-remote',
 			});
 		}
@@ -621,15 +633,16 @@ export class GlCommitDetails extends GlDetailsBase {
 		if (!this.state?.commit) return undefined;
 
 		// Build webviewItem with modifiers matching view context values
-		// Pattern: gitlens:file+committed[+current][+HEAD][+unpublished]
+		// Pattern: gitlens:file+committed[+current][+HEAD][+unpublished][+submodule]
 		const commit = this.state.commit;
 		const isStash = commit.stashNumber != null;
+		const submodule = file.submodule != null ? '+submodule' : '';
 
 		let webviewItem: DetailsItemContext['webviewItem'];
 		if (isStash) {
-			webviewItem = 'gitlens:file+stashed';
+			webviewItem = `gitlens:file+stashed${submodule}`;
 		} else {
-			webviewItem = 'gitlens:file+committed';
+			webviewItem = `gitlens:file+committed${submodule}`;
 		}
 
 		const context: DetailsItemTypedContext = {

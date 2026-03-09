@@ -1,7 +1,7 @@
 import type { CancellationToken, Disposable, Event, Range, TextDocument, Uri, WorkspaceFolder } from 'vscode';
 import type { Commit, InputBox } from '../@types/vscode.git.d.js';
 import type { ForcePushMode } from '../@types/vscode.git.enums.js';
-import type { GitConfigKeys } from '../constants.js';
+import type { DeprecatedGkConfigKeys, GitConfigKeys, GkConfigKeys } from '../constants.js';
 import type { SearchQuery } from '../constants.search.js';
 import type { Source } from '../constants.telemetry.js';
 import type { Features } from '../features.js';
@@ -33,6 +33,7 @@ import type { GitReflog } from './models/reflog.js';
 import type { GitRemote } from './models/remote.js';
 import type { Repository, RepositoryChangeEvent } from './models/repository.js';
 import type { GitRevisionRange, GitRevisionRangeNotation } from './models/revision.js';
+import type { CommitSignature, SigningConfig, ValidationResult } from './models/signature.js';
 import type { GitStash } from './models/stash.js';
 import type { GitStatus } from './models/status.js';
 import type { GitStatusFile } from './models/statusFile.js';
@@ -46,8 +47,10 @@ import type { BranchSortOptions, TagSortOptions } from './utils/-webview/sorting
 
 export type CachedGitTypes =
 	| 'branches'
+	| 'config'
 	| 'contributors'
 	| 'gitignore'
+	| 'gkConfig'
 	| 'providers'
 	| 'remotes'
 	| 'stashes'
@@ -57,7 +60,10 @@ export type CachedGitTypes =
 
 export interface GitDir {
 	readonly uri: Uri;
+	/** The common git directory for worktrees */
 	readonly commonUri?: Uri;
+	/** The parent repository for submodules */
+	readonly parentUri?: Uri;
 }
 
 export type GitProviderId = 'git' | 'github' | 'vsls';
@@ -127,10 +133,12 @@ export interface PreviousRangeComparisonUrisResult extends PreviousComparisonUri
 
 export interface RepositoryCloseEvent {
 	readonly uri: Uri;
+	readonly source?: 'scm';
 }
 
 export interface RepositoryOpenEvent {
 	readonly uri: Uri;
+	readonly source?: 'scm';
 }
 
 export type RepositoryVisibility = 'private' | 'public' | 'local';
@@ -389,6 +397,8 @@ export interface GitCommitsSubProvider {
 		rev: string,
 		cancellation?: CancellationToken,
 	): Promise<GitCommitReachability | undefined>;
+	getCommitSignature?(repoPath: string, sha: string): Promise<CommitSignature | undefined>;
+	isCommitSigned?(repoPath: string, sha: string): Promise<boolean>;
 }
 
 export interface GitOperationsSubProvider {
@@ -451,12 +461,58 @@ export interface GitPausedOperationsSubProvider {
 	continuePausedOperation(repoPath: string, options?: { skip?: boolean }): Promise<void>;
 }
 
+export type GitConfigType = 'bool' | 'int' | 'bool-or-int' | 'path' | 'expiry-date' | 'color';
 export interface GitConfigSubProvider {
-	getConfig?(repoPath: string, key: GitConfigKeys): Promise<string | undefined>;
-	setConfig?(repoPath: string, key: GitConfigKeys, value: string | undefined): Promise<void>;
+	getConfig?(
+		repoPath: string | undefined,
+		key: GitConfigKeys,
+		options?: {
+			global?: boolean;
+			/** Specifies that this Git command should always be executed locally if possible (for live share sessions) */
+			runGitLocally?: boolean;
+			type?: GitConfigType;
+		},
+	): Promise<string | undefined>;
+	getConfigRegex?(
+		repoPath: string | undefined,
+		pattern: string,
+		options?: {
+			global?: boolean;
+			/** Specifies that this Git command should always be executed locally if possible (for live share sessions) */
+			runGitLocally?: boolean;
+		},
+	): Promise<Map<string, string>>;
+	setConfig?(
+		repoPath: string | undefined,
+		key: GitConfigKeys,
+		value: string | undefined,
+		options?: {
+			global?: boolean;
+			/** Specifies that this Git command should always be executed locally if possible (for live share sessions) */
+			runGitLocally?: boolean;
+		},
+	): Promise<void>;
+
 	getCurrentUser(repoPath: string): Promise<GitUser | undefined>;
 	getDefaultWorktreePath?(repoPath: string): Promise<string | undefined>;
 	getGitDir?(repoPath: string): Promise<GitDir | undefined>;
+
+	getGkConfig?(
+		repoPath: string,
+		key: GkConfigKeys | DeprecatedGkConfigKeys,
+		options?: { type?: GitConfigType },
+	): Promise<string | undefined>;
+	getGkConfigRegex?(repoPath: string, pattern: string): Promise<Map<string, string>>;
+	setGkConfig?(
+		repoPath: string,
+		key: GkConfigKeys | DeprecatedGkConfigKeys,
+		value: string | undefined,
+	): Promise<void>;
+
+	getSigningConfig?(repoPath: string): Promise<SigningConfig>;
+	getSigningConfigFlags?(config: SigningConfig): string[];
+	setSigningConfig?(repoPath: string, config: Partial<SigningConfig>, options?: { global?: boolean }): Promise<void>;
+	validateSigningSetup?(repoPath: string): Promise<ValidationResult>;
 }
 
 export interface GitContributorsResult {
@@ -521,7 +577,7 @@ export interface GitDiffSubProvider {
 		repoPath: string,
 		ref1OrRange: string | GitRevisionRange,
 		ref2?: string,
-		options?: { filters?: GitDiffFilter[]; path?: string; similarityThreshold?: number },
+		options?: { filters?: GitDiffFilter[]; path?: string; renameLimit?: number; similarityThreshold?: number },
 		cancellation?: CancellationToken,
 	): Promise<GitFile[] | undefined>;
 	getDiffTool?(repoPath?: string): Promise<string | undefined>;
@@ -617,11 +673,13 @@ export interface GitPatchSubProvider {
 		base: string,
 		message: string,
 		patch: string,
+		options?: { sign?: boolean; source?: Source },
 	): Promise<GitCommit | undefined>;
 	createUnreachableCommitsFromPatches(
 		repoPath: string,
 		base: string | undefined,
 		patches: { message: string; patch: string; author?: GitCommitIdentityShape }[],
+		options?: { sign?: boolean; source?: Source },
 	): Promise<string[]>;
 	createEmptyInitialCommit(repoPath: string): Promise<string>;
 
@@ -728,6 +786,10 @@ export interface ResolvedRevision {
 
 export interface GitRevisionSubProvider {
 	getRevisionContent(repoPath: string, rev: string, path: string): Promise<Uint8Array | undefined>;
+	/** Gets the current HEAD SHA of a submodule in the working tree */
+	getSubmoduleHead?(repoPath: string, submodulePath: string): Promise<string | undefined>;
+	/** Gets tracked file paths from the index (reflects working tree state, even during rebase) */
+	getTrackedFiles(repoPath: string): Promise<string[]>;
 	getTreeEntryForRevision(repoPath: string, rev: string, path: string): Promise<GitTreeEntry | undefined>;
 	getTreeForRevision(repoPath: string, rev: string): Promise<GitTreeEntry[]>;
 	resolveRevision(repoPath: string, ref: string, pathOrUri?: string | Uri): Promise<ResolvedRevision>;
@@ -996,11 +1058,12 @@ export interface GitProvider extends GitRepositoryProvider, Disposable {
 	canHandlePathOrUri(scheme: string, pathOrUri: string | Uri): string | undefined;
 	findRepositoryUri(uri: Uri, isDirectory?: boolean): Promise<Uri | undefined>;
 	getAbsoluteUri(pathOrUri: string | Uri, base: string | Uri): Uri;
-	getBestRevisionUri(repoPath: string, path: string, rev: string | undefined): Promise<Uri | undefined>;
+	getBestRevisionUri(repoPath: string, pathOrUri: string | Uri, rev: string | undefined): Promise<Uri | undefined>;
 	getRelativePath(pathOrUri: string | Uri, base: string | Uri): string;
-	getRevisionUri(repoPath: string, rev: string, path: string): Uri;
+	getRevisionUri(repoPath: string, rev: string, path: string, options?: RevisionUriOptions): Uri;
 	// getRootUri(pathOrUri: string | Uri): Uri;
 	getWorkingUri(repoPath: string, uri: Uri): Promise<Uri | undefined>;
+	isFolderUri(repoPath: string, uri: Uri): Promise<boolean>;
 
 	applyChangesToWorkingFile?(uri: GitUri, ref1?: string, ref2?: string): Promise<void>;
 	clone?(url: string, parentPath: string): Promise<string | undefined>;
@@ -1080,4 +1143,9 @@ export interface RevisionUriData {
 	ref?: string;
 	repoPath: string;
 	uncPath?: string;
+	submoduleSha?: string;
+}
+
+export interface RevisionUriOptions {
+	submoduleSha?: string;
 }

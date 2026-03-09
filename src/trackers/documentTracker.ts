@@ -15,12 +15,11 @@ import type { RepositoriesChangeEvent } from '../git/gitProviderService.js';
 import type { GitUri } from '../git/gitUri.js';
 import { isGitUri } from '../git/gitUri.js';
 import type { RepositoryChangeEvent } from '../git/models/repository.js';
-import { RepositoryChange, RepositoryChangeComparisonMode } from '../git/models/repository.js';
 import { configuration } from '../system/-webview/configuration.js';
 import { setContext } from '../system/-webview/context.js';
 import { UriSet } from '../system/-webview/uriMap.js';
 import { getOpenTextDocument, isVisibleTextDocument } from '../system/-webview/vscode/documents.js';
-import { debug } from '../system/decorators/log.js';
+import { trace } from '../system/decorators/log.js';
 import { once } from '../system/event.js';
 import type { Deferrable } from '../system/function/debounce.js';
 import { debounce } from '../system/function/debounce.js';
@@ -162,15 +161,7 @@ export class GitDocumentTracker implements Disposable {
 	}
 
 	private onRepositoryChanged(e: RepositoryChangeEvent) {
-		if (
-			e.changed(
-				RepositoryChange.Index,
-				RepositoryChange.Heads,
-				RepositoryChange.PausedOperationStatus,
-				RepositoryChange.Unknown,
-				RepositoryChangeComparisonMode.Any,
-			)
-		) {
+		if (e.changed('index', 'heads', 'pausedOp', 'unknown')) {
 			void this.refreshDocuments({ addedOrChangedRepoPaths: new Set([e.repository.path]) });
 		}
 	}
@@ -246,7 +237,7 @@ export class GitDocumentTracker implements Disposable {
 		doc.dirty = dirty;
 
 		// Only fire state change events for the active document
-		if (editor == null || editor.document !== e.document) return;
+		if (editor?.document !== e.document) return;
 
 		this.fireDocumentDirtyStateChanged({ editor: editor, document: doc, dirty: doc.dirty });
 	}
@@ -285,7 +276,7 @@ export class GitDocumentTracker implements Disposable {
 		let document;
 		if (isGitUri(documentOrUri)) {
 			try {
-				document = await workspace.openTextDocument(documentOrUri.documentUri());
+				document = await workspace.openTextDocument(documentOrUri.documentUri);
 			} catch (ex) {
 				const msg: string = ex?.toString() ?? '';
 				if (env.language.startsWith('en')) {
@@ -323,7 +314,7 @@ export class GitDocumentTracker implements Disposable {
 		return doc;
 	}
 
-	@debug()
+	@trace()
 	private async addCore(document: TextDocument, visible?: boolean): Promise<TrackedGitDocument> {
 		const doc = createTrackedGitDocument(
 			this.container,
@@ -340,7 +331,7 @@ export class GitDocumentTracker implements Disposable {
 		return doc;
 	}
 
-	@debug()
+	@trace()
 	async clear(): Promise<void> {
 		for (const d of this._documentMap.values()) {
 			(await d).dispose();
@@ -352,7 +343,7 @@ export class GitDocumentTracker implements Disposable {
 	get(document: TextDocument): Promise<TrackedGitDocument> | undefined;
 	get(uri: Uri): Promise<TrackedGitDocument> | undefined;
 	get(documentOrUri: TextDocument | Uri): Promise<TrackedGitDocument> | undefined;
-	@debug()
+	@trace()
 	get(documentOrUri: TextDocument | Uri): Promise<TrackedGitDocument> | undefined {
 		if (documentOrUri instanceof Uri) {
 			const document = getOpenTextDocument(documentOrUri);
@@ -385,7 +376,7 @@ export class GitDocumentTracker implements Disposable {
 
 	resetCache(document: TextDocument, affects: 'blame' | 'diff' | 'log'): Promise<void>;
 	resetCache(uri: Uri, affects: 'blame' | 'diff' | 'log'): Promise<void>;
-	@debug()
+	@trace()
 	async resetCache(documentOrUri: TextDocument | Uri, affects: 'blame' | 'diff' | 'log'): Promise<void> {
 		const doc = this.get(documentOrUri);
 		if (doc == null) return;
@@ -403,7 +394,7 @@ export class GitDocumentTracker implements Disposable {
 		}
 	}
 
-	@debug({ args: { 1: false } })
+	@trace({ args: (document, _tracked) => ({ document: document }) })
 	private async remove(document: TextDocument, tracked?: TrackedGitDocument): Promise<void> {
 		let docPromise;
 		if (tracked != null) {
@@ -523,7 +514,7 @@ class EmptyTextDocument implements TextDocument {
 	readonly version: number;
 
 	constructor(public readonly gitUri: GitUri) {
-		this.uri = gitUri.documentUri();
+		this.uri = gitUri.documentUri;
 
 		this.eol = EndOfLine.LF;
 		this.fileName = this.uri.fsPath;

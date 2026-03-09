@@ -10,7 +10,7 @@ import CspHtmlPlugin from 'csp-html-webpack-plugin';
 import CssMinimizerPlugin from 'css-minimizer-webpack-plugin';
 import esbuild from 'esbuild';
 import { ESLintLitePlugin } from '@eamodio/eslint-lite-webpack-plugin';
-import { generateFonts } from '@twbs/fantasticon';
+import { generateFonts } from 'fantasticon';
 import ForkTsCheckerPlugin from 'fork-ts-checker-webpack-plugin';
 import fs from 'fs';
 import HtmlPlugin from 'html-webpack-plugin';
@@ -86,7 +86,7 @@ export default function (env, argv) {
 	}
 
 	/** @type {WebpackConfig[]} */
-	return [
+	const configs = [
 		getCommonConfig(mode, env),
 		getExtensionConfig('node', mode, env),
 		getExtensionConfig('webworker', mode, env),
@@ -94,6 +94,13 @@ export default function (env, argv) {
 		...getWebviewsConfigs(mode, env),
 		getUnitTestConfig('node', mode, env),
 	];
+
+	const buildComplete = new BuildCompletePlugin();
+	for (const config of configs) {
+		(config.plugins ??= []).push(buildComplete);
+	}
+
+	return configs;
 }
 
 /** @type WebpackConfig['stats'] */
@@ -419,6 +426,7 @@ function getWebviewsConfigs(mode, env) {
 		settings: { entry: './settings/settings.ts' },
 		timeline: { entry: './plus/timeline/timeline.ts', plus: true },
 		patchDetails: { entry: './plus/patchDetails/patchDetails.ts', plus: true },
+		welcome: { entry: './welcome/welcome.ts' },
 	};
 
 	if (env.webviews) {
@@ -1142,6 +1150,69 @@ class FantasticonPlugin {
 		compiler.hooks.beforeRun.tapPromise(this.pluginName, generateFn);
 		// @ts-ignore
 		compiler.hooks.watchRun.tapPromise(this.pluginName, generateFn);
+	}
+}
+
+/**
+ * Webpack plugin that tracks multi-compiler completion and emits a single
+ * "starting"/"done" signal when ALL compilers in a cycle have finished.
+ *
+ * This solves the problem where VS Code's background problem matchers trigger
+ * on the first compiler's "compiled successfully" line, causing the task to be
+ * considered "ready" before slower compilers have finished.
+ *
+ * Uses shared static state (all configs run in the same process) and a debounce
+ * to handle the rare case where a fast compiler finishes before a slow compiler's
+ * watchRun has fired.
+ */
+class BuildCompletePlugin {
+	static _activeCount = 0;
+	static _hasErrors = false;
+	/** @type {ReturnType<typeof setTimeout> | undefined} */
+	static _doneTimer;
+
+	/**
+	 * @param {import('webpack').Compiler} compiler
+	 */
+	apply(compiler) {
+		const pluginName = 'BuildCompletePlugin';
+
+		const onStart = () => {
+			// Cancel any pending "done" signal — another compiler is starting
+			clearTimeout(BuildCompletePlugin._doneTimer);
+
+			if (BuildCompletePlugin._activeCount === 0) {
+				BuildCompletePlugin._hasErrors = false;
+				process.stdout.write('[build] Compilation starting...\n');
+			}
+			BuildCompletePlugin._activeCount++;
+		};
+
+		compiler.hooks.watchRun.tap(pluginName, onStart);
+		compiler.hooks.beforeRun.tap(pluginName, onStart);
+
+		compiler.hooks.done.tap(pluginName, stats => {
+			if (stats.hasErrors()) {
+				BuildCompletePlugin._hasErrors = true;
+			}
+			BuildCompletePlugin._activeCount--;
+
+			if (BuildCompletePlugin._activeCount <= 0) {
+				// Debounce: wait briefly for any other compilers that haven't
+				// fired watchRun yet (handles the fast-compiler race in watch mode)
+				clearTimeout(BuildCompletePlugin._doneTimer);
+				BuildCompletePlugin._doneTimer = setTimeout(() => {
+					if (BuildCompletePlugin._activeCount <= 0) {
+						BuildCompletePlugin._activeCount = 0;
+						process.stdout.write(
+							BuildCompletePlugin._hasErrors
+								? '[build] Compiled with problems\n'
+								: '[build] Compiled successfully\n',
+						);
+					}
+				}, 100);
+			}
+		});
 	}
 }
 

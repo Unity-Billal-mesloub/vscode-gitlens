@@ -67,7 +67,7 @@ export class StatusFileNode extends ViewRefFileNode<'status-file', ViewsWithComm
 				file = f;
 			}
 		}
-		file ??= files[files.length - 1];
+		file ??= files.at(-1)!;
 
 		super('status-file', GitUri.fromFile(file, repoPath, ref), view, parent, file);
 
@@ -170,7 +170,7 @@ export class StatusFileNode extends ViewRefFileNode<'status-file', ViewsWithComm
 		item.tooltip = new MarkdownString(tooltip, true);
 
 		if (this._hasStagedChanges || this._hasUnstagedChanges) {
-			item.contextValue = `${ContextValues.File}${this._hasStagedChanges ? '+staged' : ''}${this._hasUnstagedChanges ? '+unstaged' : ''}`;
+			item.contextValue = `${ContextValues.File}${this._hasStagedChanges ? '+staged' : ''}${this._hasUnstagedChanges ? '+unstaged' : ''}${this.file.submodule != null ? '+submodule' : ''}`;
 
 			// Use the file icon and decorations
 			item.resourceUri = this.view.container.git.getAbsoluteUri(this.file.path, this.repoPath);
@@ -211,7 +211,7 @@ export class StatusFileNode extends ViewRefFileNode<'status-file', ViewsWithComm
 		switch (this._type) {
 			case 'ahead':
 			case 'behind': {
-				const lhs = this._files[this._files.length - 1].commit;
+				const lhs = this._files.at(-1)!.commit;
 				const rhs = this._files[0].commit;
 
 				commandArgs = {
@@ -239,7 +239,7 @@ export class StatusFileNode extends ViewRefFileNode<'status-file', ViewsWithComm
 				break;
 			}
 			default: {
-				const commit = this._files[this._files.length - 1].commit;
+				const commit = this._files.at(-1)!.commit;
 				const file = commit.fileset?.files?.find(f => f.path === this.file.path) ?? this.file;
 				commandArgs = {
 					lhs: {

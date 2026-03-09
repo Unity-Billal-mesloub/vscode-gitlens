@@ -1,13 +1,14 @@
 import type { Event, McpServerDefinition, McpServerDefinitionProvider } from 'vscode';
-import { Disposable, env, EventEmitter, lm, McpStdioServerDefinition } from 'vscode';
+import { commands, Disposable, env, EventEmitter, lm, McpStdioServerDefinition } from 'vscode';
 import type { Container } from '../../../../container.js';
+import { configuration } from '../../../../system/-webview/configuration.js';
 import type { StorageChangeEvent } from '../../../../system/-webview/storage.js';
 import { getHostAppName } from '../../../../system/-webview/vscode.js';
-import { debug, log } from '../../../../system/decorators/log.js';
+import { debug, trace } from '../../../../system/decorators/log.js';
 import type { Deferrable } from '../../../../system/function/debounce.js';
 import { debounce } from '../../../../system/function/debounce.js';
-import { Logger } from '../../../../system/logger.js';
-import { getLogScope } from '../../../../system/logger.scope.js';
+import { getScopedLogger } from '../../../../system/logger.scope.js';
+import { RunError } from '../../git/shell.errors.js';
 import { runCLICommand, toMcpInstallProvider } from '../cli/utils.js';
 
 const CLIProxyMCPConfigOutputs = {
@@ -16,12 +17,17 @@ const CLIProxyMCPConfigOutputs = {
 
 type McpConfiguration = { name: string; type: string; command: string; args: string[]; version?: string };
 
+const ipcWaitTime = 30000; // 30 seconds
+
 export class GkMcpProvider implements McpServerDefinitionProvider, Disposable {
-	private _cliVersion: string | undefined;
 	private readonly _disposable: Disposable;
 	private readonly _onDidChangeMcpServerDefinitions = new EventEmitter<void>();
 	private _fireChangeDebounced: Deferrable<() => void> | undefined = undefined;
 	private _getMcpConfigurationFromCLIPromise: Promise<McpConfiguration | undefined> | undefined;
+
+	private _ipcTimeoutId: NodeJS.Timeout | undefined;
+	private _hasProvidedDefinition: boolean = false;
+	private _waitingForIPC: boolean = true;
 
 	get onDidChangeMcpServerDefinitions(): Event<void> {
 		return this._onDidChangeMcpServerDefinitions.event;
@@ -30,11 +36,24 @@ export class GkMcpProvider implements McpServerDefinitionProvider, Disposable {
 	constructor(private readonly container: Container) {
 		this._disposable = Disposable.from(
 			this.container.storage.onDidChange(e => this.onStorageChanged(e)),
+			this.container.events.on('gk:cli:ipc:started', () => this.onIpcServerStarted()),
+			this.container.events.on('gk:cli:mcp:setup:completed', () => this.onMcpSetupCompleted()),
 			lm.registerMcpServerDefinitionProvider('gitlens.gkMcpProvider', this),
 		);
+
+		this._ipcTimeoutId = setTimeout(() => this.onIpcTimeoutExpired(), ipcWaitTime);
+	}
+
+	private clearIpcTimeout(): void {
+		this._waitingForIPC = false;
+		if (this._ipcTimeoutId == null) return;
+
+		clearTimeout(this._ipcTimeoutId);
+		this._ipcTimeoutId = undefined;
 	}
 
 	dispose(): void {
+		this.clearIpcTimeout();
 		this._disposable.dispose();
 		this._onDidChangeMcpServerDefinitions.dispose();
 	}
@@ -48,11 +67,38 @@ export class GkMcpProvider implements McpServerDefinitionProvider, Disposable {
 			return;
 		}
 
-		// Invalidate configuration promise if the version changed
-		if (this._cliVersion !== cliInstall?.version) {
-			this._getMcpConfigurationFromCLIPromise = undefined;
+		// Always invalidate on any completion (including same-version reinstall, where a prior
+		// failed mcp config result would otherwise be served from cache forever)
+		this._getMcpConfigurationFromCLIPromise = undefined;
+
+		this.fireChange();
+	}
+
+	private onIpcServerStarted(): void {
+		this.clearIpcTimeout();
+
+		// Fire change event to refresh MCP server definitions now that GK_GL_ADDR is available
+		this.fireChange();
+	}
+
+	private onMcpSetupCompleted(): void {
+		this._getMcpConfigurationFromCLIPromise = undefined;
+		this.fireChange(true);
+	}
+
+	private onIpcTimeoutExpired(): void {
+		this.clearIpcTimeout();
+
+		if (!this._hasProvidedDefinition) {
+			this.fireChange(true);
 		}
-		this._cliVersion = cliInstall?.version;
+	}
+
+	private fireChange(immediate: boolean = false) {
+		if (immediate) {
+			this._onDidChangeMcpServerDefinitions.fire();
+			return;
+		}
 
 		this._fireChangeDebounced ??= debounce(() => {
 			this._onDidChangeMcpServerDefinitions.fire();
@@ -60,48 +106,88 @@ export class GkMcpProvider implements McpServerDefinitionProvider, Disposable {
 		this._fireChangeDebounced();
 	}
 
-	@log({ exit: true })
+	@debug({ exit: true })
 	async provideMcpServerDefinitions(): Promise<McpServerDefinition[]> {
+		const { environmentVariableCollection: envVars } = this.container.context;
+		const discoveryFilePath = envVars.get('GK_GL_PATH')?.value;
+
+		// Gives time for the IPC server to start and set the environment variables
+		if (discoveryFilePath != null) {
+			this.clearIpcTimeout();
+		} else if (this._waitingForIPC) {
+			return [];
+		}
+
 		const config = await this.getMcpConfigurationFromCLI();
 		if (config == null) return [];
+
+		if (!this._hasProvidedDefinition) {
+			// Mark that we've provided a definition (either with or without GK_GL_PATH)
+			this._hasProvidedDefinition = true;
+			// Track usage for walkthrough completion
+			void this.container.usage.track('action:gitlens.mcp.bundledMcpDefinitionProvided:happened');
+		}
+
+		const serverEnv: McpStdioServerDefinition['env'] = {};
+		if (discoveryFilePath != null) {
+			serverEnv['GK_GL_PATH'] = discoveryFilePath;
+		}
 
 		const serverDefinition = new McpStdioServerDefinition(
 			config.name,
 			config.command,
 			config.args,
-			{},
+			serverEnv,
 			config.version,
 		);
 
 		return [serverDefinition];
 	}
 
-	@log()
+	@debug()
 	private getMcpConfigurationFromCLI(): Promise<McpConfiguration | undefined> {
 		this._getMcpConfigurationFromCLIPromise ??= this.getMcpConfigurationFromCLICore();
 		return this._getMcpConfigurationFromCLIPromise;
 	}
 
-	@debug()
+	@trace()
 	private async getMcpConfigurationFromCLICore(): Promise<McpConfiguration | undefined> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const cliInstall = this.container.storage.getScoped('gk:cli:install');
-		const cliPath = this.container.storage.getScoped('gk:cli:path');
 
-		if (cliInstall?.status !== 'completed' || !cliPath) return undefined;
+		if (cliInstall?.status !== 'completed') {
+			scope?.warn(`CLI not ready — install.status=${cliInstall?.status ?? 'undefined'}`);
+			return undefined;
+		}
 
 		const appName = toMcpInstallProvider(await getHostAppName());
-		if (appName == null) return undefined;
+		if (appName == null) {
+			scope?.warn(`Unsupported host app — hostAppName=${await getHostAppName()}`);
+			return undefined;
+		}
 
 		try {
-			let output = await runCLICommand(
-				['mcp', 'config', appName, '--source=gitlens', `--scheme=${env.uriScheme}`],
-				{ cwd: cliPath },
-			);
+			const args = ['mcp', 'config', appName, '--source=gitlens', `--scheme=${env.uriScheme}`];
+			if (configuration.get('gitkraken.cli.insiders.enabled')) {
+				args.push('--insiders');
+			}
+
+			let output = await runCLICommand(args);
 			output = output.replace(CLIProxyMCPConfigOutputs.checkingForUpdates, '').trim();
 
-			const config: McpConfiguration = JSON.parse(output);
+			let config: McpConfiguration;
+			try {
+				config = JSON.parse(output) as McpConfiguration;
+			} catch (parseEx) {
+				// The CLI returned non-JSON output. Log the raw output so the real error is visible.
+				scope?.error(
+					parseEx,
+					`MCP config command returned non-JSON output (CLI ${cliInstall.version}): ${output.slice(0, 500)}`,
+				);
+				throw new Error(`Invalid MCP config output from CLI ${cliInstall.version}: ${String(parseEx)}`);
+			}
+
 			if (!config.type || !config.command || !Array.isArray(config.args)) {
 				throw new Error(`Invalid MCP configuration: missing required properties (${output})`);
 			}
@@ -117,8 +203,15 @@ export class GkMcpProvider implements McpServerDefinitionProvider, Disposable {
 			};
 		} catch (ex) {
 			debugger;
-			Logger.error(ex, scope, `Error getting MCP configuration`);
-			this.onRegistrationFailed('Error getting MCP configuration', String(ex), cliInstall.version);
+			scope?.error(ex, `Error getting MCP configuration`);
+
+			// If the CLI binary is missing mid-session, automatically reinstall it.
+			if (ex instanceof RunError && ex.code === 'ENOENT') {
+				void commands.executeCommand('gitlens.ai.mcp.reinstall', { source: 'gk-mcp-provider' });
+			}
+
+			const errorDetail = ex instanceof RunError && ex.stderr ? ex.stderr.trim() : String(ex);
+			this.onRegistrationFailed('Error getting MCP configuration', errorDetail, cliInstall.version);
 		}
 
 		return undefined;

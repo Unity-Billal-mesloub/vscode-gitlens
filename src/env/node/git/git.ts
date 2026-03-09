@@ -1,18 +1,14 @@
 import type { SpawnOptions } from 'child_process';
 import { spawn } from 'child_process';
-import { accessSync } from 'fs';
 import { join as joinPath } from 'path';
 import * as process from 'process';
-import type { CancellationToken, Disposable, OutputChannel } from 'vscode';
+import type { CancellationToken, Disposable, LogOutputChannel } from 'vscode';
 import { Uri, window, workspace } from 'vscode';
 import { hrtime } from '@env/hrtime.js';
-import { GlyphChars } from '../../../constants.js';
 import type { Container } from '../../../container.js';
 import { CancellationError, isCancellationError } from '../../../errors.js';
 import type { FilteredGitFeatures, GitFeatureOrPrefix, GitFeatures } from '../../../features.js';
 import { gitFeaturesByVersion } from '../../../features.js';
-import type { GitCommandOptions, GitSpawnOptions } from '../../../git/commandOptions.js';
-import { GitErrorHandling } from '../../../git/commandOptions.js';
 import type {
 	BranchErrorReason,
 	CheckoutErrorReason,
@@ -27,6 +23,7 @@ import type {
 	RebaseErrorReason,
 	ResetErrorReason,
 	RevertErrorReason,
+	ShowErrorReason,
 	StashApplyErrorReason,
 	StashPushErrorReason,
 	TagErrorReason,
@@ -41,25 +38,28 @@ import {
 	PullError,
 	PushError,
 	ResetError,
+	ShowError,
 	StashPushError,
 	WorkspaceUntrustedError,
 } from '../../../git/errors.js';
+import type { GitErrorHandling, GitExecOptions, GitResult, GitSpawnOptions } from '../../../git/execTypes.js';
 import type { GitDir } from '../../../git/gitProvider.js';
 import type { GitDiffFilter } from '../../../git/models/diff.js';
 import { rootSha } from '../../../git/models/revision.js';
 import { parseGitRemoteUrl } from '../../../git/parsers/remoteParser.js';
-import { isUncommitted, isUncommittedStaged, shortenRevision } from '../../../git/utils/revision.utils.js';
+import { isUncommitted, isUncommittedStaged } from '../../../git/utils/revision.utils.js';
 import { getCancellationTokenId } from '../../../system/-webview/cancellation.js';
 import { configuration } from '../../../system/-webview/configuration.js';
 import { splitPath } from '../../../system/-webview/path.js';
 import { getScopedCounter } from '../../../system/counter.js';
 import { slowCallWarningThreshold } from '../../../system/logger.constants.js';
 import { Logger } from '../../../system/logger.js';
-import { getLoggableScopeBlockOverride } from '../../../system/logger.scope.js';
+import { formatLoggableScopeBlock } from '../../../system/logger.scope.js';
 import { dirname, isAbsolute, joinPaths, normalizePath } from '../../../system/path.js';
-import { isPromise } from '../../../system/promise.js';
+import { defer, isPromise } from '../../../system/promise.js';
 import { getDurationMilliseconds } from '../../../system/string.js';
 import { compare, fromString } from '../../../system/version.js';
+import { GitQueue, inferGitCommandPriority } from './gitQueue.js';
 import type { GitLocation } from './locator.js';
 import { CancelledRunError, RunError } from './shell.errors.js';
 import type { RunOptions, RunResult } from './shell.js';
@@ -72,6 +72,7 @@ export const gitConfigsBranch = ['-c', 'color.branch=false'] as const;
 export const gitConfigsDiff = ['-c', 'color.diff=false', '-c', 'diff.mnemonicPrefix=false'] as const;
 export const gitConfigsLog = ['-c', 'log.showSignature=false'] as const;
 export const gitConfigsLogWithFiles = ['-c', 'log.showSignature=false', '-c', 'diff.renameLimit=0'] as const;
+export const gitConfigsLogWithSignatures = ['-c', 'log.showSignature=true'] as const;
 export const gitConfigsPull = ['-c', 'merge.autoStash=true', '-c', 'rebase.autoStash=true'] as const;
 export const gitConfigsStatus = ['-c', 'color.status=false'] as const;
 
@@ -83,9 +84,10 @@ export const GitErrors = {
 	alreadyCheckedOut: /already checked out/i,
 	alreadyExists: /already exists/i,
 	ambiguousArgument: /fatal:\s*ambiguous argument ['"].+['"]: unknown revision or path not in the working tree/i,
+	badObject: /fatal:\s*bad object (.*?)/i,
 	badRevision: /bad revision '(.*?)'/i,
-	branchAlreadyExists: /fatal: A branch named '.+?' already exists/i,
-	notFullyMerged: /error: The branch '.+?' is not fully merged/i,
+	branchAlreadyExists: /fatal:\s*A branch named '.+?' already exists/i,
+	notFullyMerged: /error:\s*The branch '.+?' is not fully merged/i,
 	cantLockRef: /cannot lock ref|unable to update local ref/i,
 	changesWouldBeOverwritten:
 		/Your local changes to the following files would be overwritten|Your local changes would be overwritten|overwritten by checkout/i,
@@ -97,30 +99,32 @@ export const GitErrors = {
 	detachedHead: /You are in 'detached HEAD' state/i,
 	entryNotUpToDate: /error:\s*Entry ['"].+['"] not uptodate\. Cannot merge\./i,
 	failedToDeleteDirectoryNotEmpty: /failed to delete '(.*?)': Directory not empty/i,
-	invalidName: /fatal: '.+?' is not a valid branch name/i,
+	invalidName: /fatal:\s*'.+?' is not a valid branch name/i,
 	invalidLineCount: /file .+? has only (\d+) lines/i,
 	invalidObjectName: /invalid object name: (.*)\s/i,
 	invalidObjectNameList: /could not open object name list: (.*)\s/i,
 	invalidTagName: /invalid tag name/i,
 	mainWorkingTree: /is a main working tree/i,
 	mergeAborted: /merge.*aborted/i,
-	mergeInProgress: /^fatal: You have not concluded your merge/i,
+	mergeInProgress: /^fatal:\s*You have not concluded your merge/i,
 	noFastForward: /\(non-fast-forward\)/i,
 	noMergeBase: /no merge base/i,
 	noRemoteReference: /unable to delete '.+?': remote ref does not exist/i,
 	noRemoteRepositorySpecified: /No remote repository specified\./i,
-	noUpstream: /^fatal: The current branch .* has no upstream branch/i,
+	noUpstream: /^fatal:\s*The current branch .* has no upstream branch/i,
 	notAValidObjectName: /Not a valid object name/i,
 	notAWorkingTree: /'(.*?)' is not a working tree/i,
 	noUserNameConfigured: /Please tell me who you are\./i,
 	noPausedOperation:
 		/no merge (?:in progress|to abort)|no cherry-pick(?: or revert)? in progress|no rebase in progress/i,
 	permissionDenied: /Permission.*denied/i,
-	pushRejected: /^error: failed to push some refs to\b/m,
-	pushRejectedRefDoesNotExists: /error: unable to delete '(.*?)': remote ref does not exist/m,
+	pushRejected: /^error:\s*failed to push some refs to\b/m,
+	pushRejectedRefDoesNotExists: /error:\s*unable to delete '(.*?)': remote ref does not exist/m,
+	pushRejectedRemoteRefUpdated: /! \[rejected\].*\(remote ref updated since checkout\)/m,
+	pushRejectedStaleInfo: /! \[rejected\].*\(stale info\)/m,
 	rebaseAborted: /Nothing to do|rebase.*aborted/i,
 	rebaseInProgress: /It seems that there is already a rebase-(?:merge|apply) directory/i,
-	rebaseMissingTodo: /error: could not read file .*\/git-rebase-todo': No such file or directory/,
+	rebaseMissingTodo: /error:\s*could not read file .*\/git-rebase-todo': No such file or directory/,
 	rebaseMultipleBranches: /cannot rebase onto multiple branches/i,
 	revertAborted: /revert.*aborted/i,
 	revertInProgress: /^(error: )?(revert|cherry-pick) is already in progress/i,
@@ -138,10 +142,12 @@ export const GitErrors = {
 	unmergedChanges: /error:\s*you need to resolve your current index first/i,
 	unmergedFiles: /is not possible because you have unmerged files|You have unmerged files/i,
 	unresolvedConflicts: /You must edit all merge conflicts|Resolve all conflicts/i,
+	unsafeRepository:
+		/(?:^fatal:\s*detected dubious ownership in repository at '([^']+)'|unsafe repository \('([^']+)' is owned by someone else\))[\s\S]*(git config --global --add safe\.directory [^\n•]+)/m,
 	unstagedChanges: /You have unstaged changes/i,
 };
 
-const GitWarnings = {
+export const GitWarnings = {
 	notARepository: /Not a git repository/i,
 	outsideRepository: /is outside repository/i,
 	noPath: /no such path/i,
@@ -160,6 +166,11 @@ const GitWarnings = {
 	tipBehind: /tip of your current branch is behind/i,
 };
 
+const fatalPrefixRegex = /fatal:\s*/g;
+const newlineOrReturnRegex = /\r?\n|\r/g;
+const ignoreRevsFileArgRegex = /^--ignore-revs-file\s*=?\s*(.*)$/;
+const trailingNewlineRegex = /[\r|\n]+$/;
+
 function defaultExceptionHandler(ex: Error, cwd: string | undefined, start?: [number, number]): void {
 	if (isCancellationError(ex)) throw ex;
 
@@ -171,8 +182,8 @@ function defaultExceptionHandler(ex: Error, cwd: string | undefined, start?: [nu
 				Logger.warn(
 					`[${cwd}] Git ${msg
 						.trim()
-						.replace(/fatal: /g, '')
-						.replace(/\r?\n|\r/g, ` ${GlyphChars.Dot} `)}${duration}`,
+						.replace(fatalPrefixRegex, '')
+						.replace(newlineOrReturnRegex, ` \u2022 `)}${duration}`,
 				);
 				return;
 			}
@@ -193,7 +204,7 @@ function defaultExceptionHandler(ex: Error, cwd: string | undefined, start?: [nu
 const uniqueCounterForStdin = getScopedCounter();
 const uniqueCounterForStream = getScopedCounter();
 
-type ExitCodeOnlyGitCommandOptions = GitCommandOptions & { exitCodeOnly: true };
+type ExitCodeOnlyGitCommandOptions = GitExecOptions & { exitCodeOnly: true };
 export type PushForceOptions = { withLease: true; ifIncludes?: boolean } | { withLease: false; ifIncludes?: never };
 
 export class GitError extends Error {
@@ -230,20 +241,15 @@ export class GitError extends Error {
 	}
 }
 
-export type GitResult<T extends string | Buffer | unknown> = {
-	readonly exitCode: number;
-	readonly stdout: T;
-	readonly stderr?: T;
-
-	readonly cancelled?: boolean;
-};
-
 export class Git implements Disposable {
 	private readonly _disposable: Disposable;
 	/** Map of running git commands -- avoids running duplicate overlapping commands */
 	private readonly pendingCommands = new Map<string, Promise<RunResult<string | Buffer>>>();
+	/** Queue for throttling background git operations */
+	private readonly _queue: GitQueue;
 
 	constructor(private readonly container: Container) {
+		this._queue = new GitQueue(container);
 		this._disposable = container.events.on('git:cache:reset', e => {
 			// Ignore provider resets (e.g. it needs to be git specific)
 			if (e.data.types?.every(t => t === 'providers')) return;
@@ -253,6 +259,7 @@ export class Git implements Disposable {
 	}
 
 	dispose(): void {
+		this._queue.dispose();
 		this._disposable.dispose();
 	}
 
@@ -261,21 +268,49 @@ export class Git implements Disposable {
 		...args: readonly (string | undefined)[]
 	): Promise<GitResult<unknown>>;
 	async exec<T extends string | Buffer = string>(
-		options: GitCommandOptions,
+		options: GitExecOptions,
 		...args: readonly (string | undefined)[]
 	): Promise<GitResult<T>>;
 	async exec<T extends string | Buffer = string>(
-		options: GitCommandOptions,
+		options: GitExecOptions,
 		...args: readonly (string | undefined)[]
 	): Promise<GitResult<T | unknown>> {
 		if (!workspace.isTrusted) throw new WorkspaceUntrustedError();
 
+		const runArgs = args.filter(a => a != null);
+		const gitCommand = `git ${runArgs.join(' ')}`;
+
+		// If cache is provided, use it to cache the full result
+		if (options.caching != null) {
+			return options.caching.cache.getOrCreate(
+				// Use cache.commonPath if provided for worktree-shared data, otherwise cwd
+				options.caching.commonPath ?? options.cwd!,
+				gitCommand,
+				async cacheable => {
+					const result = await this.execCore<T>({ ...options, caching: undefined }, runArgs, gitCommand);
+					if (result.exitCode !== 0) {
+						cacheable.invalidate();
+					}
+					return result;
+				},
+				options.caching.options,
+			);
+		}
+
+		return this.execCore<T>(options, runArgs, gitCommand);
+	}
+
+	private async execCore<T extends string | Buffer>(
+		options: GitExecOptions,
+		args: string[],
+		gitCommand: string,
+	): Promise<GitResult<T | unknown>> {
 		const start = hrtime();
 
-		const { cancellation, configs, correlationKey, errors: errorHandling, encoding, local, ...opts } = options;
-		const runArgs = args.filter(a => a != null);
+		gitCommand = `[${options.cwd}] ${gitCommand}`;
+		const { cancellation, configs, correlationKey, errors: errorHandling, encoding, runLocally, ...opts } = options;
 
-		const defaultTimeout = (configuration.get('advanced.gitTimeout') ?? 60) * 1000;
+		const defaultTimeout = (configuration.get('advanced.git.timeout') ?? 60) * 1000;
 		const runOpts: Mutable<RunOptions> = {
 			...opts,
 			timeout: opts.timeout === 0 || defaultTimeout === 0 ? undefined : (opts.timeout ?? defaultTimeout),
@@ -292,8 +327,6 @@ export class Git implements Disposable {
 			},
 		};
 
-		const gitCommand = `[${runOpts.cwd}] git ${runArgs.join(' ')}`;
-
 		const cacheKey = `${correlationKey !== undefined ? `${correlationKey}:` : ''}${
 			options?.stdin != null ? `${uniqueCounterForStdin.next()}:` : ''
 		}${cancellation != null ? `${getCancellationTokenId(cancellation)}:` : ''}${gitCommand}`;
@@ -303,18 +336,18 @@ export class Git implements Disposable {
 		if (promise == null) {
 			waiting = false;
 
+			// Create a deferred promise and store it immediately to prevent duplicate commands
+			// from concurrent calls that might arrive during async operations below
+			const deferred = defer<RunResult<string | Buffer>>();
+			promise = deferred.promise;
+			this.pendingCommands.set(cacheKey, promise);
+
 			// Fixes https://github.com/gitkraken/vscode-gitlens/issues/73 & https://github.com/gitkraken/vscode-gitlens/issues/161
 			// See https://stackoverflow.com/questions/4144417/how-to-handle-asian-characters-in-file-names-in-git-on-os-x
-			runArgs.unshift(
-				'-c',
-				'core.quotepath=false',
-				'-c',
-				'color.ui=false',
-				...(configs != null ? configs : emptyArray),
-			);
+			args.unshift('-c', 'core.quotepath=false', '-c', 'color.ui=false', ...(configs ?? emptyArray));
 
 			if (process.platform === 'win32') {
-				runArgs.unshift('-c', 'core.longpaths=true');
+				args.unshift('-c', 'core.longpaths=true');
 			}
 
 			let abortController: AbortController | undefined;
@@ -325,15 +358,27 @@ export class Git implements Disposable {
 				disposeCancellation = cancellation.onCancellationRequested(() => abortController?.abort());
 			}
 
-			promise = runSpawn<T>(await this.path(), runArgs, encoding ?? 'utf8', runOpts).finally(() => {
-				this.pendingCommands.delete(cacheKey);
-				void disposeCancellation?.dispose();
-			});
+			// Determine command priority:
+			// Priority resolution:
+			// 1. Explicit priority from options (highest precedence)
+			// 2. Inferred from command type (only downgrades expensive commands to Background)
+			const priority = options.priority ?? inferGitCommandPriority(args);
 
-			this.pendingCommands.set(cacheKey, promise);
+			// Execute through the queue (interactive/normal run immediately, background is throttled)
+			const gitPath = await this.path();
+			void this._queue
+				.execute(priority, () => runSpawn<T>(gitPath, args, encoding ?? 'utf8', runOpts))
+				.then(deferred.fulfill, (e: unknown) => deferred.cancel(e instanceof Error ? e : new Error(String(e))))
+				.finally(() => {
+					this.pendingCommands.delete(cacheKey);
+					void disposeCancellation?.dispose();
+				})
+				.catch(() => {});
 		} else {
 			waiting = true;
-			Logger.debug(`${getLoggableScopeBlockOverride('GIT')} ${gitCommand} ${GlyphChars.Dot} waiting...`);
+			Logger.trace(
+				`${formatLoggableScopeBlock('GIT')} ${gitCommand} \u2022 awaiting existing call in progress...`,
+			);
 		}
 
 		let exception: Error | undefined;
@@ -356,7 +401,7 @@ export class Git implements Disposable {
 							? 'cancellation'
 							: 'unknown';
 				Logger.warn(
-					`${getLoggableScopeBlockOverride('GIT')} ${gitCommand} ${GlyphChars.Dot} ABORTED after ${duration}ms (${reason})`,
+					`${formatLoggableScopeBlock('GIT')} ${gitCommand} \u2022 ABORTED after ${duration}ms (${reason})`,
 				);
 				this.container.telemetry.sendEvent('op/git/aborted', {
 					operation: gitCommand,
@@ -366,7 +411,7 @@ export class Git implements Disposable {
 				});
 			}
 
-			if (errorHandling === GitErrorHandling.Ignore) {
+			if (errorHandling === 'ignore') {
 				if (ex instanceof RunError) {
 					return {
 						stdout: ex.stdout as T,
@@ -385,7 +430,7 @@ export class Git implements Disposable {
 			}
 
 			exception = ex instanceof CancelledRunError ? new CancellationError(ex) : new GitError(ex);
-			if (errorHandling === GitErrorHandling.Throw) throw exception;
+			if (errorHandling === 'throw') throw exception;
 
 			defaultExceptionHandler(exception, options.cwd, start);
 			exception = undefined;
@@ -575,9 +620,7 @@ export class Git implements Disposable {
 	private _gitLocationPromise: Promise<GitLocation> | undefined;
 	private async getLocation(): Promise<GitLocation> {
 		if (this._gitLocation == null) {
-			if (this._gitLocationPromise == null) {
-				this._gitLocationPromise = this._gitLocator();
-			}
+			this._gitLocationPromise ??= this._gitLocator();
 			this._gitLocation = await this._gitLocationPromise;
 		}
 		return this._gitLocation;
@@ -651,7 +694,7 @@ export class Git implements Disposable {
 			startLine?: number;
 			endLine?: number;
 		},
-	): Promise<GitResult<string>> {
+	): Promise<GitResult> {
 		const [file, root] = splitPath(fileName, repoPath, true);
 
 		const params = ['blame', '--root', '--incremental'];
@@ -669,7 +712,7 @@ export class Git implements Disposable {
 				arg => arg !== '--ignore-revs-file' && arg.startsWith('--ignore-revs-file'),
 			);
 			if (argIndex !== -1) {
-				const match = /^--ignore-revs-file\s*=?\s*(.*)$/.exec(options.args[argIndex]);
+				const match = ignoreRevsFileArgRegex.exec(options.args[argIndex]);
 				if (match != null) {
 					options.args.splice(argIndex, 1, '--ignore-revs-file', match[1]);
 				}
@@ -771,7 +814,7 @@ export class Git implements Disposable {
 			remotes?: boolean;
 		},
 		cancellation?: CancellationToken,
-	): Promise<GitResult<string>> {
+	): Promise<GitResult> {
 		const params: string[] = [options?.type ?? 'branch'];
 		if (options?.all) {
 			params.push('-a');
@@ -794,7 +837,7 @@ export class Git implements Disposable {
 				cwd: repoPath,
 				cancellation: cancellation,
 				configs: gitConfigsBranch,
-				errors: GitErrorHandling.Ignore,
+				errors: 'ignore',
 			},
 			...params,
 		);
@@ -805,7 +848,7 @@ export class Git implements Disposable {
 		repoPath: string,
 		ref: string,
 		{ createBranch, path }: { createBranch?: string; path?: string } = {},
-	): Promise<GitResult<string>> {
+	): Promise<GitResult> {
 		const params = ['checkout'];
 		if (createBranch) {
 			params.push('-b', createBranch, ref, '--');
@@ -853,30 +896,6 @@ export class Git implements Disposable {
 		return folderPath;
 	}
 
-	async config__get(key: string, repoPath?: string, options?: { local?: boolean }): Promise<string | undefined> {
-		const result = await this.exec(
-			{ cwd: repoPath ?? '', errors: GitErrorHandling.Ignore, local: options?.local },
-			'config',
-			'--get',
-			key,
-		);
-		return result.stdout.trim() || undefined;
-	}
-
-	async config__get_regex(
-		pattern: string,
-		repoPath?: string,
-		options?: { local?: boolean },
-	): Promise<string | undefined> {
-		const result = await this.exec(
-			{ cwd: repoPath ?? '', errors: GitErrorHandling.Ignore, local: options?.local },
-			'config',
-			'--get-regex',
-			pattern,
-		);
-		return result.stdout.trim() || undefined;
-	}
-
 	async diff(
 		repoPath: string,
 		fileName: string,
@@ -889,7 +908,7 @@ export class Git implements Disposable {
 			renames?: boolean;
 			similarityThreshold?: number | null;
 		},
-	): Promise<GitResult<string>> {
+	): Promise<GitResult> {
 		const params = ['diff', '--no-ext-diff', '--minimal'];
 
 		if (options?.linesOfContext != null) {
@@ -1112,7 +1131,7 @@ export class Git implements Disposable {
 			);
 
 			if (options?.force?.withLease && error.details.reason === 'rejected') {
-				if (ex.stderr && /! \[rejected\].*\(stale info\)/m.test(ex.stderr)) {
+				if (ex.stderr && GitErrors.pushRejectedStaleInfo.test(ex.stderr)) {
 					throw new PushError(
 						{
 							reason: 'rejectedWithLease',
@@ -1123,11 +1142,7 @@ export class Git implements Disposable {
 						ex,
 					);
 				}
-				if (
-					options.force.ifIncludes &&
-					ex.stderr &&
-					/! \[rejected\].*\(remote ref updated since checkout\)/m.test(ex.stderr)
-				) {
+				if (options.force.ifIncludes && ex.stderr && GitErrors.pushRejectedRemoteRefUpdated.test(ex.stderr)) {
 					throw new PushError(
 						{
 							reason: 'rejectedWithLeaseIfIncludes',
@@ -1203,159 +1218,9 @@ export class Git implements Disposable {
 		}
 	}
 
-	async rev_parse__currentBranch(
-		repoPath: string,
-		ordering: 'date' | 'author-date' | 'topo' | null,
-		cancellation?: CancellationToken,
-	): Promise<[string, string | undefined] | undefined> {
-		let result;
-		try {
-			result = await this.exec(
-				{ cwd: repoPath, cancellation: cancellation, errors: GitErrorHandling.Throw },
-				'rev-parse',
-				'--abbrev-ref',
-				'--symbolic-full-name',
-				'@',
-				'@{u}',
-				'--',
-			);
-			return [result.stdout, undefined];
-		} catch (ex) {
-			if (isCancellationError(ex)) throw ex;
-
-			const msg: string = ex?.toString() ?? '';
-			if (GitErrors.badRevision.test(msg) || GitWarnings.noUpstream.test(msg)) {
-				if (ex.stdout != null && ex.stdout.length !== 0) {
-					return [ex.stdout, undefined];
-				}
-
-				try {
-					result = await this.exec(
-						{ cwd: repoPath, cancellation: cancellation },
-						'symbolic-ref',
-						'--short',
-						'HEAD',
-					);
-					if (result.stdout) return [result.stdout.trim(), undefined];
-				} catch {
-					if (isCancellationError(ex)) throw ex;
-				}
-				const data = await this.symbolic_ref__HEAD(repoPath, 'origin', cancellation);
-				if (data != null) {
-					return [data.startsWith('origin/') ? data.substring('origin/'.length) : data, undefined];
-				}
-
-				const defaultBranch = (await this.config__get('init.defaultBranch', repoPath)) ?? 'main';
-				const branchConfig = await this.config__get_regex(`branch\\.${defaultBranch}\\.+`, repoPath, {
-					local: true,
-				});
-
-				let remote;
-				let remoteBranch;
-
-				if (branchConfig) {
-					let match = /^branch\..+\.remote\s(.+)$/m.exec(branchConfig);
-					if (match != null) {
-						remote = match[1];
-					}
-
-					match = /^branch\..+\.merge\srefs\/heads\/(.+)$/m.exec(branchConfig);
-					if (match != null) {
-						remoteBranch = match[1];
-					}
-				}
-				return [`${defaultBranch}${remote && remoteBranch ? `\n${remote}/${remoteBranch}` : ''}`, undefined];
-			}
-
-			if (GitWarnings.headNotABranch.test(msg)) {
-				result = await this.exec(
-					{
-						cwd: repoPath,
-						cancellation: cancellation,
-						configs: gitConfigsLog,
-						errors: GitErrorHandling.Ignore,
-					},
-					'log',
-					'-n1',
-					'--format=%H',
-					ordering ? `--${ordering}-order` : undefined,
-					'--',
-				);
-
-				if (result.cancelled || cancellation?.isCancellationRequested) throw new CancellationError();
-
-				const sha = result.stdout.trim();
-				if (!sha) return undefined;
-
-				return [`(HEAD detached at ${shortenRevision(sha)})`, sha];
-			}
-
-			defaultExceptionHandler(ex, repoPath);
-			return undefined;
-		}
-	}
-
-	async symbolic_ref__HEAD(
-		repoPath: string,
-		remote: string,
-		cancellation?: CancellationToken,
-	): Promise<string | undefined> {
-		let retried = false;
-		while (true) {
-			try {
-				const result = await this.exec(
-					{ cwd: repoPath, cancellation: cancellation },
-					'symbolic-ref',
-					'--short',
-					`refs/remotes/${remote}/HEAD`,
-				);
-				return result.stdout.trim() || undefined;
-			} catch (ex) {
-				if (/is not a symbolic ref/.test(ex.stderr)) {
-					try {
-						if (!retried) {
-							retried = true;
-							await this.exec(
-								{ cwd: repoPath, cancellation: cancellation },
-								'remote',
-								'set-head',
-								'-a',
-								remote,
-							);
-							continue;
-						}
-
-						const result = await this.exec(
-							{ cwd: repoPath, cancellation: cancellation },
-							'ls-remote',
-							'--symref',
-							remote,
-							'HEAD',
-						);
-						if (result.stdout) {
-							const match = /ref:\s(\S+)\s+HEAD/m.exec(result.stdout);
-							if (match != null) {
-								const [, branch] = match;
-								return `${remote}/${branch.substring('refs/heads/'.length).trim()}`;
-							}
-						}
-					} catch {
-						if (isCancellationError(ex)) throw ex;
-					}
-				}
-
-				return undefined;
-			}
-		}
-	}
-
-	async rev_parse__git_dir(cwd: string): Promise<{ path: string; commonPath?: string } | undefined> {
-		const result = await this.exec(
-			{ cwd: cwd, errors: GitErrorHandling.Ignore },
-			'rev-parse',
-			'--git-dir',
-			'--git-common-dir',
-		);
+	// eslint-disable-next-line @typescript-eslint/naming-convention
+	private async rev_parse__git_dir(cwd: string): Promise<{ path: string; commonPath?: string } | undefined> {
+		const result = await this.exec({ cwd: cwd, errors: 'ignore' }, 'rev-parse', '--git-dir', '--git-common-dir');
 		if (!result.stdout) return undefined;
 
 		// Keep trailing spaces which are part of the directory name
@@ -1380,43 +1245,102 @@ export class Git implements Disposable {
 		return { path: dotGitPath };
 	}
 
-	async rev_parse__show_toplevel(cwd: string): Promise<[safe: true, repoPath: string] | [safe: false] | []> {
+	/**
+	 * Combined rev-parse call that returns repository info in a single spawn.
+	 * This is an optimization to reduce process spawns during repository discovery.
+	 *
+	 * @returns Object with repoPath (toplevel), gitDir path, optional commonGitDir path for worktrees,
+	 *          and optional superprojectPath for submodules.
+	 *          Returns `[false]` for unsafe repositories, or `undefined`/empty array for non-repos.
+	 */
+	async rev_parse__repository_info(
+		cwd: string,
+	): Promise<
+		| { repoPath: string; gitDir: string; commonGitDir: string | undefined; superprojectPath: string | undefined }
+		| [safe: true, repoPath: string]
+		| [safe: false]
+		| []
+	> {
 		let result;
 
 		if (!workspace.isTrusted) {
 			// Check if the folder is a bare clone: if it has a file named HEAD && `rev-parse --show-cdup` is empty
-			try {
-				accessSync(joinPaths(cwd, 'HEAD'));
-				result = await this.exec(
-					{ cwd: cwd, errors: GitErrorHandling.Throw, configs: ['-C', cwd] },
-					'rev-parse',
-					'--show-cdup',
-				);
-				if (!result.stdout.trim()) {
-					Logger.log(`Skipping (untrusted workspace); bare clone repository detected in '${cwd}'`);
-					return emptyArray as [];
+			if (await fsExists(joinPaths(cwd, 'HEAD'))) {
+				try {
+					result = await this.exec(
+						{ cwd: cwd, errors: 'throw', configs: ['-C', cwd] },
+						'rev-parse',
+						'--show-cdup',
+					);
+					if (!result.stdout.trim()) {
+						Logger.warn(`Skipping (untrusted workspace); bare clone repository detected in '${cwd}'`);
+						return emptyArray as [];
+					}
+				} catch {
+					// If this throw, we should be good to open the repo (e.g. HEAD doesn't exist)
 				}
-			} catch {
-				// If this throw, we should be good to open the repo (e.g. HEAD doesn't exist)
 			}
 		}
 
 		try {
-			result = await this.exec({ cwd: cwd, errors: GitErrorHandling.Throw }, 'rev-parse', '--show-toplevel');
-			// Make sure to normalize: https://github.com/git-for-windows/git/issues/2478
+			result = await this.exec(
+				{ cwd: cwd, errors: 'throw' },
+				'rev-parse',
+				'--show-toplevel',
+				'--git-dir',
+				'--git-common-dir',
+				'--show-superproject-working-tree',
+			);
+			if (!result.stdout) return emptyArray as [];
+
+			// Output is 3-4 lines: show-toplevel, git-dir, git-common-dir, [show-superproject-working-tree]
+			// The 4th line is only present for submodules
 			// Keep trailing spaces which are part of the directory name
-			return !result.stdout
-				? (emptyArray as [])
-				: [true, normalizePath(result.stdout.trimStart().replace(/[\r|\n]+$/, ''))];
+			const lines = result.stdout.split('\n').map(r => r.trimStart());
+			const [repoPath, dotGitPath, commonDotGitPath, superprojectPath] = lines;
+
+			if (!repoPath) return emptyArray as [];
+
+			// Normalize repo path: https://github.com/git-for-windows/git/issues/2478
+			const normalizedRepoPath = normalizePath(repoPath.replace(trailingNewlineRegex, ''));
+
+			// Normalize git dir paths (may be relative)
+			let gitDir = dotGitPath;
+			if (gitDir && !isAbsolute(gitDir)) {
+				gitDir = joinPaths(cwd, gitDir);
+			}
+			gitDir = normalizePath(gitDir);
+
+			let commonGitDir: string | undefined;
+			if (commonDotGitPath) {
+				commonGitDir = commonDotGitPath;
+				if (!isAbsolute(commonGitDir)) {
+					commonGitDir = joinPaths(cwd, commonGitDir);
+				}
+				commonGitDir = normalizePath(commonGitDir);
+				// Only set if different from gitDir
+				if (commonGitDir === gitDir) {
+					commonGitDir = undefined;
+				}
+			}
+
+			// Normalize superproject path if present (4th line only exists for submodules)
+			const normalizedSuperprojectPath = superprojectPath
+				? normalizePath(superprojectPath.replace(trailingNewlineRegex, ''))
+				: undefined;
+
+			return {
+				repoPath: normalizedRepoPath,
+				gitDir: gitDir,
+				commonGitDir: commonGitDir,
+				superprojectPath: normalizedSuperprojectPath,
+			};
 		} catch (ex) {
 			if (ex instanceof WorkspaceUntrustedError) return emptyArray as [];
 
-			const unsafeMatch =
-				/(?:^fatal: detected dubious ownership in repository at '([^']+)'|unsafe repository \('([^']+)' is owned by someone else\))[\s\S]*(git config --global --add safe\.directory [^\n•]+)/m.exec(
-					ex.stderr,
-				);
+			const unsafeMatch = GitErrors.unsafeRepository.exec(ex.stderr);
 			if (unsafeMatch != null) {
-				Logger.log(
+				Logger.warn(
 					`Skipping; unsafe repository detected in '${unsafeMatch[1] || unsafeMatch[2]}'; run '${
 						unsafeMatch[3]
 					}' to allow it`,
@@ -1424,14 +1348,82 @@ export class Git implements Disposable {
 				return [false];
 			}
 
-			const inDotGit = /this operation must be run in a work tree/.test(ex.stderr);
+			const inDotGit = GitWarnings.mustRunInWorkTree.test(ex.stderr);
 			// Check if we are in a bare clone
 			if (inDotGit && workspace.isTrusted) {
-				result = await this.exec(
-					{ cwd: cwd, errors: GitErrorHandling.Ignore },
-					'rev-parse',
-					'--is-bare-repository',
+				result = await this.exec({ cwd: cwd, errors: 'ignore' }, 'rev-parse', '--is-bare-repository');
+				if (result.stdout.trim() === 'true') {
+					const result = await this.rev_parse__git_dir(cwd);
+					const repoPath = result?.commonPath ?? result?.path;
+					if (repoPath?.length) return [true, repoPath];
+				}
+			}
+
+			if (inDotGit || ex.code === 'ENOENT') {
+				// If the `cwd` doesn't exist, walk backward to see if any parent folder exists
+				let exists = inDotGit ? false : await fsExists(cwd);
+				if (!exists) {
+					do {
+						const parent = dirname(cwd);
+						if (parent === cwd || parent.length === 0) return emptyArray as [];
+
+						cwd = parent;
+						exists = await fsExists(cwd);
+					} while (!exists);
+
+					return this.rev_parse__repository_info(cwd);
+				}
+			}
+			return emptyArray as [];
+		}
+	}
+
+	async rev_parse__show_toplevel(cwd: string): Promise<[safe: true, repoPath: string] | [safe: false] | []> {
+		let result;
+
+		if (!workspace.isTrusted) {
+			// Check if the folder is a bare clone: if it has a file named HEAD && `rev-parse --show-cdup` is empty
+			if (await fsExists(joinPaths(cwd, 'HEAD'))) {
+				try {
+					result = await this.exec(
+						{ cwd: cwd, errors: 'throw', configs: ['-C', cwd] },
+						'rev-parse',
+						'--show-cdup',
+					);
+					if (!result.stdout.trim()) {
+						Logger.warn(`Skipping (untrusted workspace); bare clone repository detected in '${cwd}'`);
+						return emptyArray as [];
+					}
+				} catch {
+					// If this throw, we should be good to open the repo (e.g. HEAD doesn't exist)
+				}
+			}
+		}
+
+		try {
+			result = await this.exec({ cwd: cwd, errors: 'throw' }, 'rev-parse', '--show-toplevel');
+			// Make sure to normalize: https://github.com/git-for-windows/git/issues/2478
+			// Keep trailing spaces which are part of the directory name
+			return !result.stdout
+				? (emptyArray as [])
+				: [true, normalizePath(result.stdout.trimStart().replace(trailingNewlineRegex, ''))];
+		} catch (ex) {
+			if (ex instanceof WorkspaceUntrustedError) return emptyArray as [];
+
+			const unsafeMatch = GitErrors.unsafeRepository.exec(ex.stderr);
+			if (unsafeMatch != null) {
+				Logger.warn(
+					`Skipping; unsafe repository detected in '${unsafeMatch[1] || unsafeMatch[2]}'; run '${
+						unsafeMatch[3]
+					}' to allow it`,
 				);
+				return [false];
+			}
+
+			const inDotGit = GitWarnings.mustRunInWorkTree.test(ex.stderr);
+			// Check if we are in a bare clone
+			if (inDotGit && workspace.isTrusted) {
+				result = await this.exec({ cwd: cwd, errors: 'ignore' }, 'rev-parse', '--is-bare-repository');
 				if (result.stdout.trim() === 'true') {
 					const result = await this.rev_parse__git_dir(cwd);
 					const repoPath = result?.commonPath ?? result?.path;
@@ -1460,40 +1452,58 @@ export class Git implements Disposable {
 
 	async show__content<T extends string | Buffer>(
 		repoPath: string | undefined,
-		fileName: string,
-		ref: string,
+		path: string,
+		rev: string,
 		options?: {
 			encoding?: 'binary' | 'ascii' | 'utf8' | 'utf16le' | 'ucs2' | 'base64' | 'latin1' | 'hex' | 'buffer';
+			errors?: GitErrorHandling;
 		},
 	): Promise<T | undefined> {
-		const [file, root] = splitPath(fileName, repoPath, true);
+		const [file, root] = splitPath(path, repoPath, true);
 
-		if (isUncommittedStaged(ref)) {
-			ref = ':';
+		if (isUncommittedStaged(rev)) {
+			rev = ':';
 		}
-		if (isUncommitted(ref)) throw new Error(`ref=${ref} is uncommitted`);
+		if (isUncommitted(rev)) throw new Error(`ref=${rev} is uncommitted`);
 
-		const opts: GitCommandOptions = {
+		const opts: GitExecOptions = {
 			configs: gitConfigsLog,
 			cwd: root,
 			encoding: options?.encoding ?? 'utf8',
-			errors: GitErrorHandling.Throw,
+			errors: 'throw',
 		};
-		const args = ref.endsWith(':') ? `${ref}./${file}` : `${ref}:./${file}`;
+		const args = rev.endsWith(':') ? `${rev}./${file}` : `${rev}:./${file}`;
+		const params = ['show', '--textconv', args, '--'];
 
 		try {
-			const result = await this.exec<T>(opts, 'show', '--textconv', args, '--');
+			const result = await this.exec<T>(opts, ...params);
 			return result.stdout;
 		} catch (ex) {
 			const msg: string = ex?.toString() ?? '';
-			if (ref === ':' && GitErrors.badRevision.test(msg)) {
-				return this.show__content<T>(repoPath, fileName, 'HEAD:', options);
+			if (rev === ':' && GitErrors.badRevision.test(msg)) {
+				return this.show__content<T>(repoPath, path, 'HEAD:', options);
 			}
 
+			const error = getGitCommandError(
+				'show',
+				ex,
+				reason =>
+					new ShowError(
+						{
+							reason: reason ?? 'other',
+							rev: rev,
+							path: path,
+							gitCommand: { repoPath: repoPath ?? '', args: params },
+						},
+						ex,
+					),
+			);
+			if (options?.errors === 'throw') throw error;
+
 			if (
-				GitErrors.badRevision.test(msg) ||
-				GitWarnings.notFound.test(msg) ||
-				GitWarnings.foundButNotInRevision.test(msg)
+				ShowError.is(error, 'invalidRevision') ||
+				ShowError.is(error, 'notFound') ||
+				ShowError.is(error, 'notInRevision')
 			) {
 				return undefined;
 			}
@@ -1520,7 +1530,18 @@ export class Git implements Disposable {
 			params.push('--include-untracked');
 		}
 
-		if (options?.keepIndex && !options?.includeUntracked) {
+		// "--keep-index --include-untracked -- <pathspec>" hits a bug in git in some circumstances.
+		// Don't allow these flags together.
+		//
+		// $ mkdir stash-test && cd stash-test && git init
+		// $ echo a > a.txt
+		// $ git add a.txt
+		// $ git commit -m init
+		// $ echo b > b.txt
+		// $ git stash push --keep-index --include-untracked -- b.txt
+		// Saved working directory and index state WIP on main: 8a280fe init
+		// error: pathspec ':(prefix:0)b.txt' did not match any file(s) known to git
+		if (options?.keepIndex && !(params.includes('--include-untracked') && options?.pathspecs?.length)) {
 			params.push('--keep-index');
 		}
 
@@ -1578,7 +1599,7 @@ export class Git implements Disposable {
 		options?: { similarityThreshold?: number },
 		cancellation?: CancellationToken,
 		...pathspecs: string[]
-	): Promise<GitResult<string>> {
+	): Promise<GitResult> {
 		const params = [
 			'status',
 			porcelainVersion >= 2 ? `--porcelain=v${porcelainVersion}` : '--porcelain',
@@ -1638,8 +1659,8 @@ export class Git implements Disposable {
 		}
 	}
 	private logGitCommandStart(command: string, id: number): void {
-		Logger.log(`${getLoggableScopeBlockOverride(`GIT:→${id}`)} ${command} ${GlyphChars.Dot} starting...`);
-		this.logCore(`${getLoggableScopeBlockOverride(`→${id}`, '')} ${command} ${GlyphChars.Dot} starting...`);
+		Logger.info(`${formatLoggableScopeBlock(`GIT →${id}`)} ${command} \u2022 starting...`);
+		this.logCore(`${formatLoggableScopeBlock(`→${id}`, '')} ${command} \u2022 starting...`);
 	}
 
 	private logGitCommandComplete(
@@ -1655,40 +1676,41 @@ export class Git implements Disposable {
 		if (ex != null) {
 			Logger.error(
 				undefined,
-				`${getLoggableScopeBlockOverride(id ? `GIT:←${id}` : 'GIT')} ${command} ${GlyphChars.Dot} ${
+				`${formatLoggableScopeBlock(id ? `GIT ←${id}` : 'GIT')} ${command} \u2022 ${
 					isCancellationError(ex)
 						? 'cancelled'
 						: (ex.message || String(ex) || '')
 								.trim()
-								.replace(/fatal: /g, '')
-								.replace(/\r?\n|\r/g, ` ${GlyphChars.Dot} `)
+								.replace(fatalPrefixRegex, '')
+								.replace(newlineOrReturnRegex, ` \u2022 `)
 				} [${duration}ms]${status}`,
 			);
 		} else if (slow) {
 			Logger.warn(
-				`${getLoggableScopeBlockOverride(id ? `GIT:←${id}` : 'GIT', `*${duration}ms`)} ${command} [*${duration}ms]${status}`,
+				`${formatLoggableScopeBlock(id ? `GIT ←${id}` : 'GIT', `*${duration}ms`)} ${command} [*${duration}ms]${status}`,
 			);
 		} else {
-			Logger.log(
-				`${getLoggableScopeBlockOverride(id ? `GIT:←${id}` : 'GIT', `${duration}ms`)} ${command} [${duration}ms]${status}`,
+			Logger.info(
+				`${formatLoggableScopeBlock(id ? `GIT ←${id}` : 'GIT', `${duration}ms`)} ${command} [${duration}ms]${status}`,
 			);
 		}
 
 		this.logCore(
-			`${getLoggableScopeBlockOverride(`${id ? `←${id}` : ''}${slow ? '*' : ''}`, `${duration}ms`)} ${command}${status}`,
+			`${formatLoggableScopeBlock(`${id ? `←${id}` : ''}${slow ? '*' : ''}`, `${duration}ms`)} ${command}${status}`,
 			ex,
 		);
 	}
 
-	private _gitOutput: OutputChannel | undefined;
+	private _gitOutput: LogOutputChannel | undefined;
+	private get gitOutput(): LogOutputChannel {
+		return (this._gitOutput ??= window.createOutputChannel('GitLens (Git)', { log: true }));
+	}
 
 	private logCore(message: string, ex?: Error | undefined): void {
-		if (!Logger.enabled(ex != null ? 'error' : 'debug')) return;
-
-		this._gitOutput ??= window.createOutputChannel('GitLens (Git)', { log: true });
-		this._gitOutput.appendLine(`${Logger.timestamp} ${message}${ex != null ? ` ${GlyphChars.Dot} FAILED` : ''}`);
 		if (ex != null) {
-			this._gitOutput.appendLine(`\n${String(ex)}\n`);
+			this.gitOutput.error(`${message} \u2022 FAILED\n${String(ex)}`);
+		} else {
+			this.gitOutput.info(message);
 		}
 	}
 }
@@ -1706,6 +1728,7 @@ type GitCommand =
 	| 'rebase'
 	| 'reset'
 	| 'revert'
+	| 'show'
 	| 'stash-apply'
 	| 'stash-push'
 	| 'tag'
@@ -1724,6 +1747,7 @@ type GitCommandToReasonMap = {
 	rebase: RebaseErrorReason;
 	reset: ResetErrorReason;
 	revert: RevertErrorReason;
+	show: ShowErrorReason;
 	'stash-apply': StashApplyErrorReason;
 	'stash-push': StashPushErrorReason;
 	tag: TagErrorReason;
@@ -1848,6 +1872,16 @@ const errorToReasonMap = new Map<GitCommand, [RegExp, GitCommandToReasonMap[GitC
 			[GitErrors.unresolvedConflicts, 'conflicts'],
 			[GitErrors.uncommittedChanges, 'uncommittedChanges'],
 			[GitErrors.changesWouldBeOverwritten, 'wouldOverwriteChanges'],
+		],
+	],
+	[
+		'show',
+		[
+			[GitErrors.badObject, 'invalidObject'],
+			[GitErrors.badRevision, 'invalidRevision'],
+			[GitErrors.notAValidObjectName, 'invalidRevision'],
+			[GitWarnings.notFound, 'notFound'],
+			[GitWarnings.foundButNotInRevision, 'notInRevision'],
 		],
 	],
 	['stash-apply', [[GitErrors.changesWouldBeOverwritten, 'uncommittedChanges']]],

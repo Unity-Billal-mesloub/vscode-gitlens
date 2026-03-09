@@ -31,7 +31,7 @@ import { isVirtualUri } from '../system/-webview/vscode/uris.js';
 import { is, once } from '../system/function.js';
 import { filterMap, find, first, join, map } from '../system/iterable.js';
 import { getLoggableName, Logger } from '../system/logger.js';
-import { startLogScope } from '../system/logger.scope.js';
+import { maybeStartScopedLogger } from '../system/logger.scope.js';
 import { pluralize } from '../system/string.js';
 
 class GitRecentChangeCodeLens extends CodeLens {
@@ -96,9 +96,8 @@ export class GitCodeLensProvider implements CodeLensProvider, Disposable {
 		// Since we can't currently blame edited virtual documents, don't even attempt anything if dirty
 		if (document.isDirty && isVirtualUri(document.uri)) return [];
 
-		using scope = startLogScope(
+		using scope = maybeStartScopedLogger(
 			`${getLoggableName(this)}.provideCodeLenses(${Logger.toLoggable(document)})`,
-			false,
 		);
 
 		const trackedDocument = await this.container.documentTracker.getOrAdd(document);
@@ -113,17 +112,11 @@ export class GitCodeLensProvider implements CodeLensProvider, Disposable {
 
 		const cfg = configuration.get('codeLens', document);
 		let languageScope = { ...cfg.scopesByLanguage?.find(ll => ll.language?.toLowerCase() === document.languageId) };
-		if (languageScope == null) {
-			languageScope = {
-				language: document.languageId,
-			};
-		}
-		if (languageScope.scopes == null) {
-			languageScope.scopes = cfg.scopes;
-		}
-		if (languageScope.symbolScopes == null) {
-			languageScope.symbolScopes = cfg.symbolScopes;
-		}
+		languageScope ??= {
+			language: document.languageId,
+		};
+		languageScope.scopes ??= cfg.scopes;
+		languageScope.symbolScopes ??= cfg.symbolScopes;
 
 		languageScope.symbolScopes =
 			languageScope.symbolScopes != null
@@ -172,7 +165,7 @@ export class GitCodeLensProvider implements CodeLensProvider, Disposable {
 			: undefined;
 
 		if (symbols !== undefined) {
-			Logger.log(scope, `${symbols.length} symbol(s) found`);
+			scope?.debug(`${symbols.length} symbol(s) found`);
 			for (const sym of symbols) {
 				this.provideCodeLens(
 					lenses,
@@ -207,7 +200,7 @@ export class GitCodeLensProvider implements CodeLensProvider, Disposable {
 						gitUri.fileName,
 						SymbolKind.File,
 						'',
-						new Location(gitUri.documentUri(), new Range(0, 0, 0, blameRange.start.character)),
+						new Location(gitUri.documentUri, new Range(0, 0, 0, blameRange.start.character)),
 					);
 					lenses.push(
 						new GitRecentChangeCodeLens(
@@ -233,7 +226,7 @@ export class GitCodeLensProvider implements CodeLensProvider, Disposable {
 						gitUri.fileName,
 						SymbolKind.File,
 						'',
-						new Location(gitUri.documentUri(), new Range(0, 1, 0, blameRange.start.character)),
+						new Location(gitUri.documentUri, new Range(0, 1, 0, blameRange.start.character)),
 					);
 					lenses.push(
 						new GitAuthorsCodeLens(
@@ -365,7 +358,7 @@ export class GitCodeLensProvider implements CodeLensProvider, Disposable {
 
 			const line = document.lineAt(getRangeFromSymbol(symbol).start);
 			// Make sure there is only 1 lens per line
-			if (lenses.length && lenses[lenses.length - 1].range.start.line === line.lineNumber) return;
+			if (lenses.length && lenses.at(-1)!.range.start.line === line.lineNumber) return;
 
 			// Anchor the CodeLens to the start of the line -- so that the range won't change with edits (otherwise the CodeLens will be removed and re-added)
 			let startChar = 0;
@@ -620,7 +613,7 @@ function applyDiffWithPreviousCommand<T extends GitRecentChangeCodeLens | GitAut
 		undefined,
 		{
 			commit: commit,
-			uri: lens.uri!.toFileUri(),
+			uri: lens.uri!.workingFileUri,
 		},
 	);
 	return lens;
@@ -669,7 +662,7 @@ function applyRevealCommitInViewCommand<T extends GitRecentChangeCodeLens | GitA
 	lens.command = createCommand<[Uri, ShowQuickCommitCommandArgs]>(
 		commit?.isUncommitted ? ('' as CodeLensCommands) : 'gitlens.revealCommitInView',
 		title,
-		lens.uri!.toFileUri(),
+		lens.uri!.workingFileUri,
 		{
 			commit: commit,
 			sha: commit === undefined ? undefined : commit.sha,
@@ -710,7 +703,7 @@ function applyShowQuickCommitDetailsCommand<T extends GitRecentChangeCodeLens | 
 	lens.command = createCommand<[Uri, ShowQuickCommitCommandArgs]>(
 		commit?.isUncommitted ? ('' as CodeLensCommands) : 'gitlens.showQuickCommitDetails',
 		title,
-		lens.uri!.toFileUri(),
+		lens.uri!.workingFileUri,
 		{
 			commit: commit,
 			sha: commit === undefined ? undefined : commit.sha,
@@ -727,7 +720,7 @@ function applyShowQuickCommitFileDetailsCommand<T extends GitRecentChangeCodeLen
 	lens.command = createCommand<[Uri, ShowQuickCommitFileCommandArgs]>(
 		commit?.isUncommitted ? ('' as CodeLensCommands) : 'gitlens.showQuickCommitFileDetails',
 		title,
-		lens.uri!.toFileUri(),
+		lens.uri!.workingFileUri,
 		{
 			commit: commit,
 			sha: commit === undefined ? undefined : commit.sha,
@@ -740,7 +733,7 @@ function applyShowQuickCurrentBranchHistoryCommand<T extends GitRecentChangeCode
 	title: string,
 	lens: T,
 ): T {
-	lens.command = createCommand<[Uri]>('gitlens.showQuickRepoHistory', title, lens.uri!.toFileUri());
+	lens.command = createCommand<[Uri]>('gitlens.showQuickRepoHistory', title, lens.uri!.workingFileUri);
 	return lens;
 }
 
@@ -751,7 +744,7 @@ function applyShowQuickFileHistoryCommand<T extends GitRecentChangeCodeLens | Gi
 	lens.command = createCommand<[Uri, ShowQuickFileHistoryCommandArgs]>(
 		'gitlens.showQuickFileHistory',
 		title,
-		lens.uri!.toFileUri(),
+		lens.uri!.workingFileUri,
 		{
 			range: lens.isFullRange ? undefined : lens.blameRange,
 		},
@@ -763,7 +756,7 @@ function applyToggleFileBlameCommand<T extends GitRecentChangeCodeLens | GitAuth
 	title: string,
 	lens: T,
 ): T {
-	lens.command = createCommand<[Uri]>('gitlens.toggleFileBlame:codelens', title, lens.uri!.toFileUri());
+	lens.command = createCommand<[Uri]>('gitlens.toggleFileBlame:codelens', title, lens.uri!.workingFileUri);
 	return lens;
 }
 
@@ -776,7 +769,7 @@ function applyToggleFileChangesCommand<T extends GitRecentChangeCodeLens | GitAu
 	lens.command = createCommand<[Uri, ToggleFileChangesAnnotationCommandArgs]>(
 		'gitlens.toggleFileChanges:codelens',
 		title,
-		lens.uri!.toFileUri(),
+		lens.uri!.workingFileUri,
 		{
 			type: 'changes',
 			context: { sha: commit.sha, only: only, selection: false },
@@ -789,7 +782,7 @@ function applyToggleFileHeatmapCommand<T extends GitRecentChangeCodeLens | GitAu
 	title: string,
 	lens: T,
 ): T {
-	lens.command = createCommand<[Uri]>('gitlens.toggleFileHeatmap:codelens', title, lens.uri!.toFileUri());
+	lens.command = createCommand<[Uri]>('gitlens.toggleFileHeatmap:codelens', title, lens.uri!.workingFileUri);
 	return lens;
 }
 

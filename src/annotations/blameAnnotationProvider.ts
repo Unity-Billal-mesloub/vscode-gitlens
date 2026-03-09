@@ -7,7 +7,7 @@ import type { GitBlame } from '../git/models/blame.js';
 import type { GitCommit } from '../git/models/commit.js';
 import { changesMessage, detailsMessage } from '../hovers/hovers.js';
 import { configuration } from '../system/-webview/configuration.js';
-import { log } from '../system/decorators/log.js';
+import { debug } from '../system/decorators/log.js';
 import type { TrackedGitDocument } from '../trackers/trackedDocument.js';
 import type { DidChangeStatusCallback } from './annotationProvider.js';
 import { AnnotationProviderBase } from './annotationProvider.js';
@@ -59,7 +59,7 @@ export abstract class BlameAnnotationProviderBase extends AnnotationProviderBase
 		return blame;
 	}
 
-	@log({ args: false })
+	@debug({ args: false })
 	protected getComputedHeatmap(blame: GitBlame): ComputedHeatmap {
 		const dates: Date[] = [];
 
@@ -111,7 +111,7 @@ export abstract class BlameAnnotationProviderBase extends AnnotationProviderBase
 			Array.isArray(lookupTable)
 				? lookupTable
 				: unified
-					? lookupTable.hot.concat(lookupTable.cold)
+					? [...lookupTable.hot, ...lookupTable.cold]
 					: date.getTime() < coldThresholdTimestamp
 						? lookupTable.cold
 						: lookupTable.hot;
@@ -220,7 +220,7 @@ function getRelativeAgeLookupTable(dates: Date[]) {
 	const half = Math.floor(dates.length / 2);
 	const median = dates.length % 2 ? dates[half].getTime() : (dates[half - 1].getTime() + dates[half].getTime()) / 2.0;
 
-	const newest = dates[dates.length - 1].getTime();
+	const newest = dates.at(-1)!.getTime();
 	let step = (newest - median) / 5;
 	for (let i = 5; i > 0; i--) {
 		lookup.push(median + step * i);

@@ -1,4 +1,4 @@
-import type { Sources } from '../../../constants.telemetry.js';
+import type { Source, Sources } from '../../../constants.telemetry.js';
 import type { GitCommitIdentityShape } from '../../../git/models/commit.js';
 import type { RepositoryShape } from '../../../git/models/repositoryShape.js';
 import type { AIModel } from '../../../plus/ai/models/model.js';
@@ -95,6 +95,7 @@ export interface State extends WebviewState<'gitlens.composer'> {
 
 	// AI composition state
 	hasUsedAutoCompose: boolean; // true if auto-compose has been successfully used at least once
+	autoComposeInstructions?: string; // optional instructions to trigger auto-compose on load
 
 	// Content state
 	hasChanges: boolean; // true if there are working directory changes to compose
@@ -164,6 +165,7 @@ export interface ComposerContext {
 		files: number;
 		hunks: number;
 		lines: number;
+		hash: string;
 		staged: boolean;
 		unstaged: boolean;
 		commits: boolean;
@@ -214,7 +216,7 @@ export interface ComposerContext {
 			count: number;
 		};
 	};
-	source: Sources | undefined;
+	source: Source | undefined;
 	mode: 'experimental' | 'preview';
 	errors: {
 		safety: {
@@ -237,6 +239,7 @@ export const baseContext: ComposerContext = {
 		files: 0,
 		hunks: 0,
 		lines: 0,
+		hash: '',
 		staged: false,
 		unstaged: false,
 		commits: false,

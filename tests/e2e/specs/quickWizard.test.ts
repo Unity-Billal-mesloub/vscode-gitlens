@@ -71,8 +71,20 @@ const test = base.extend({
 
 				// Create a worktree for testing worktree-linked branch scenarios
 				// Use a unique path inside the repo's temp directory to avoid conflicts
+				// Retry to handle transient lock file conflicts from VS Code's background git operations
 				const worktreeDir = path.join(repoDir, '..', `worktree-${Date.now()}`);
-				await git.worktree(worktreeDir, 'feature-with-worktree');
+				for (let attempt = 0; attempt < 3; attempt++) {
+					try {
+						await git.worktree(worktreeDir, 'feature-with-worktree');
+						break;
+					} catch (ex) {
+						if (attempt < 2 && String(ex).includes('index.lock')) {
+							await new Promise(resolve => setTimeout(resolve, 1000));
+							continue;
+						}
+						throw ex;
+					}
+				}
 
 				// Create stashes for testing stash commands
 				// Stash 1: Working tree changes (must include untracked since file is new)
@@ -1881,8 +1893,8 @@ test.describe('Quick Wizard — Worktree Commands', () => {
 			// Wait for confirm step
 			await quickPick.waitForStep({ title: /Confirm Create Worktree.*feature-2/i });
 
-			// Select "Choose a Specific Folder..." option
-			await quickPick.selectItem(/Choose a Specific Folder/i);
+			// Select "Choose Specific Folder..." option
+			await quickPick.selectItem(/Choose Specific Folder/i);
 
 			// The folder picker dialog should appear - press Escape to cancel it
 			await page.waitForTimeout(ShortTimeout);
@@ -1934,6 +1946,46 @@ test.describe('Quick Wizard — Worktree Commands', () => {
 			// Back from confirm → branch picker
 			await quickPick.goBackAndWaitForStep({ title: /Create Worktree/i, placeholder: /Choose a branch/i });
 
+			await quickPick.cancel();
+			expect(await quickPick.isVisible()).toBeFalsy();
+		});
+
+		// This test must run LAST in the Worktree Create Flow section because it actually creates a worktree
+		test('Create → Open transition: after creating worktree, open prompt appears', async ({
+			vscode,
+			vscode: {
+				gitlens: { quickPick },
+			},
+		}) => {
+			await selectCommandSubcommandAndWaitForStepWithOptionalRepo(vscode, 'worktree', 'create', {
+				title: /Create Worktree/i,
+				placeholder: /Choose a branch/i,
+			});
+
+			// Select a non-checked-out branch (feature-2 has no worktree yet)
+			await quickPick.enterTextAndWaitForItems('feature-2');
+			await quickPick.selectItem(/feature-2/i);
+
+			// Should go directly to confirm step (no branch name input needed)
+			await quickPick.waitForStep({ title: /Confirm Create Worktree.*feature-2/i });
+
+			// Confirm to actually create the worktree
+			// Select the default option "Create Worktree from Branch"
+			await quickPick.selectItem(/Create Worktree from Branch/i);
+
+			// After worktree is created, should transition to "Open Worktree" confirm step
+			// The default setting is "prompt" so the open dialog should appear
+			await quickPick.waitForStep(
+				{ title: /Open Worktree.*feature-2|Confirm.*Open.*Worktree/i },
+				15000, // Worktree creation can take a moment
+			);
+
+			// Verify the open options are shown
+			const items = await quickPick.getVisibleItems();
+			expect(items.some(item => item.includes('Open Worktree'))).toBeTruthy();
+			expect(items.some(item => item.includes('New Window'))).toBeTruthy();
+
+			// Cancel without opening the worktree (to avoid changing the workspace)
 			await quickPick.cancel();
 			expect(await quickPick.isVisible()).toBeFalsy();
 		});

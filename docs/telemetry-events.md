@@ -126,6 +126,16 @@ void
   'config.largePromptThreshold': number,
   'config.usedCustomInstructions': boolean,
   'correlationId': string,
+  'customInstructions.commitMessage.setting.length': number,
+  'customInstructions.commitMessage.setting.used': boolean,
+  'customInstructions.length': number,
+  'customInstructions.setting.length': number,
+  'customInstructions.setting.used': boolean,
+  'customInstructions.used': boolean,
+  'diff.files.count': number,
+  'diff.hash': string,
+  'diff.hunks.count': number,
+  'diff.lines.count': number,
   'duration': number,
   'failed': boolean,
   'failed.cancelled.reason': 'large-prompt',
@@ -187,6 +197,16 @@ void
   'config.largePromptThreshold': number,
   'config.usedCustomInstructions': boolean,
   'correlationId': string,
+  'customInstructions.commitMessage.setting.length': number,
+  'customInstructions.commitMessage.setting.used': boolean,
+  'customInstructions.length': number,
+  'customInstructions.setting.length': number,
+  'customInstructions.setting.used': boolean,
+  'customInstructions.used': boolean,
+  'diff.files.count': number,
+  'diff.hash': string,
+  'diff.hunks.count': number,
+  'diff.lines.count': number,
   'duration': number,
   'failed': boolean,
   'failed.cancelled.reason': 'large-prompt',
@@ -219,6 +239,16 @@ or
   'config.largePromptThreshold': number,
   'config.usedCustomInstructions': boolean,
   'correlationId': string,
+  'customInstructions.commitMessage.setting.length': number,
+  'customInstructions.commitMessage.setting.used': boolean,
+  'customInstructions.length': number,
+  'customInstructions.setting.length': number,
+  'customInstructions.setting.used': boolean,
+  'customInstructions.used': boolean,
+  'diff.files.count': number,
+  'diff.hash': string,
+  'diff.hunks.count': number,
+  'diff.lines.count': number,
   'duration': number,
   'failed': boolean,
   'failed.cancelled.reason': 'large-prompt',
@@ -251,6 +281,16 @@ or
   'config.largePromptThreshold': number,
   'config.usedCustomInstructions': boolean,
   'correlationId': string,
+  'customInstructions.commitMessage.setting.length': number,
+  'customInstructions.commitMessage.setting.used': boolean,
+  'customInstructions.length': number,
+  'customInstructions.setting.length': number,
+  'customInstructions.setting.used': boolean,
+  'customInstructions.used': boolean,
+  'diff.files.count': number,
+  'diff.hash': string,
+  'diff.hunks.count': number,
+  'diff.lines.count': number,
   'draftType': 'stash' | 'patch' | 'suggested_pr_change',
   'duration': number,
   'failed': boolean,
@@ -284,6 +324,16 @@ or
   'config.largePromptThreshold': number,
   'config.usedCustomInstructions': boolean,
   'correlationId': string,
+  'customInstructions.commitMessage.setting.length': number,
+  'customInstructions.commitMessage.setting.used': boolean,
+  'customInstructions.length': number,
+  'customInstructions.setting.length': number,
+  'customInstructions.setting.used': boolean,
+  'customInstructions.used': boolean,
+  'diff.files.count': number,
+  'diff.hash': string,
+  'diff.hunks.count': number,
+  'diff.lines.count': number,
   'duration': number,
   'failed': boolean,
   'failed.cancelled.reason': 'large-prompt',
@@ -316,6 +366,16 @@ or
   'config.largePromptThreshold': number,
   'config.usedCustomInstructions': boolean,
   'correlationId': string,
+  'customInstructions.commitMessage.setting.length': number,
+  'customInstructions.commitMessage.setting.used': boolean,
+  'customInstructions.length': number,
+  'customInstructions.setting.length': number,
+  'customInstructions.setting.used': boolean,
+  'customInstructions.used': boolean,
+  'diff.files.count': number,
+  'diff.hash': string,
+  'diff.hunks.count': number,
+  'diff.lines.count': number,
   'duration': number,
   'failed': boolean,
   'failed.cancelled.reason': 'large-prompt',
@@ -348,6 +408,16 @@ or
   'config.largePromptThreshold': number,
   'config.usedCustomInstructions': boolean,
   'correlationId': string,
+  'customInstructions.commitMessage.setting.length': number,
+  'customInstructions.commitMessage.setting.used': boolean,
+  'customInstructions.length': number,
+  'customInstructions.setting.length': number,
+  'customInstructions.setting.used': boolean,
+  'customInstructions.used': boolean,
+  'diff.files.count': number,
+  'diff.hash': string,
+  'diff.hunks.count': number,
+  'diff.lines.count': number,
   'duration': number,
   'failed': boolean,
   'failed.cancelled.reason': 'large-prompt',
@@ -380,6 +450,16 @@ or
   'config.largePromptThreshold': number,
   'config.usedCustomInstructions': boolean,
   'correlationId': string,
+  'customInstructions.commitMessage.setting.length': number,
+  'customInstructions.commitMessage.setting.used': boolean,
+  'customInstructions.length': number,
+  'customInstructions.setting.length': number,
+  'customInstructions.setting.used': boolean,
+  'customInstructions.used': boolean,
+  'diff.files.count': number,
+  'diff.hash': string,
+  'diff.hunks.count': number,
+  'diff.lines.count': number,
   'duration': number,
   'failed': boolean,
   'failed.cancelled.reason': 'large-prompt',
@@ -557,7 +637,8 @@ void
   'attempts': number,
   'autoInstall': boolean,
   'error.message': string,
-  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees'
+  'insiders': boolean,
+  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees'
 }
 ```
 
@@ -569,7 +650,8 @@ void
 {
   'attempts': number,
   'autoInstall': boolean,
-  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees'
+  'insiders': boolean,
+  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees'
 }
 ```
 
@@ -581,7 +663,8 @@ void
 {
   'attempts': number,
   'autoInstall': boolean,
-  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'insiders': boolean,
+  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'version': string
 }
 ```
@@ -806,6 +889,48 @@ or
 }
 ```
 
+### commit/signed
+
+> Sent when a commit is signed
+
+```typescript
+{
+  'format': 'gpg' | 'ssh' | 'x509' | 'openpgp'
+}
+```
+
+### commit/signing/failed
+
+> Sent when commit signing fails
+
+```typescript
+{
+  'format': 'gpg' | 'ssh' | 'x509' | 'openpgp',
+  'reason': 'unknown' | 'noKey' | 'gpgNotFound' | 'sshNotFound' | 'passphraseFailed'
+}
+```
+
+### commit/signing/setup
+
+> Sent when commit signing setup is completed
+
+```typescript
+{
+  'format': 'gpg' | 'ssh' | 'x509' | 'openpgp',
+  'keyGenerated': boolean
+}
+```
+
+### commit/signing/setupWizard/opened
+
+> Sent when commit signing setup wizard is opened
+
+```typescript
+{
+  'alreadyConfigured': boolean
+}
+```
+
 ### commitDetails/closed
 
 ```typescript
@@ -979,6 +1104,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1003,7 +1129,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1034,6 +1160,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1058,7 +1185,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1096,6 +1223,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1120,7 +1248,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1157,6 +1285,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1181,7 +1310,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1221,6 +1350,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1245,7 +1375,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1276,6 +1406,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1300,7 +1431,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1333,6 +1464,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1357,7 +1489,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1391,6 +1523,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1415,7 +1548,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1448,6 +1581,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1472,7 +1606,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1508,6 +1642,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1532,7 +1667,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1563,6 +1698,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1587,7 +1723,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1625,6 +1761,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1649,7 +1786,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1686,6 +1823,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1710,7 +1848,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1750,6 +1888,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1774,7 +1913,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1805,6 +1944,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1829,7 +1969,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1872,6 +2012,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1896,7 +2037,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -1929,6 +2070,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -1953,7 +2095,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -2013,6 +2155,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -2037,7 +2180,7 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
@@ -2068,6 +2211,7 @@ or
   'context.commits.finalCount': number,
   'context.commits.initialCount': number,
   'context.diff.files.count': number,
+  'context.diff.hash': string,
   'context.diff.hunks.count': number,
   'context.diff.lines.count': number,
   'context.diff.staged.exists': boolean,
@@ -2092,13 +2236,33 @@ or
   'context.operations.undo.count': number,
   'context.session.duration': number,
   'context.session.start': string,
-  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees',
+  'context.source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees',
   'context.warnings.indexChanged': boolean,
   'context.warnings.workingDirectoryChanged': boolean,
   'context.webview.host': 'view' | 'editor',
   'context.webview.id': string,
   'context.webview.instanceId': string,
   'context.webview.type': string
+}
+```
+
+### gitCommand/conflict
+
+> Sent when a conflict occurs while running a conflict-prone git command
+
+```typescript
+{
+  'command': 'rebase' | 'merge' | 'cherry-pick' | 'revert' | 'stash-apply' | 'stash-pop'
+}
+```
+
+### gitCommand/run
+
+> Sent when a conflict-prone git command (merge, rebase, cherry-pick, revert, stash apply/pop) is run
+
+```typescript
+{
+  'command': 'rebase' | 'merge' | 'cherry-pick' | 'revert' | 'stash-apply' | 'stash-pop'
 }
 ```
 
@@ -2691,7 +2855,7 @@ void
 {
   'instance': number,
   'items.error': string,
-  'action': 'soft-open' | 'code-suggest' | 'open' | 'merge' | 'switch' | 'open-worktree' | 'switch-and-code-suggest' | 'show-overview' | 'open-changes' | 'open-in-graph' | 'pin' | 'unpin' | 'snooze' | 'unsnooze' | 'open-suggestion' | 'open-suggestion-browser',
+  'action': 'soft-open' | 'code-suggest' | 'merge' | 'open' | 'switch' | 'open-worktree' | 'switch-and-code-suggest' | 'show-overview' | 'open-changes' | 'open-in-graph' | 'pin' | 'unpin' | 'snooze' | 'unsnooze' | 'open-suggestion' | 'open-suggestion-browser',
   'groups.blocked.collapsed': boolean,
   'groups.blocked.count': number,
   'groups.count': number,
@@ -3028,7 +3192,7 @@ void
   'cli.version': string,
   'error.message': string,
   'reason': string,
-  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees'
+  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees'
 }
 ```
 
@@ -3040,7 +3204,7 @@ void
 {
   'cli.version': string,
   'requiresUserCompletion': boolean,
-  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees'
+  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees'
 }
 ```
 
@@ -3053,7 +3217,7 @@ void
   'cli.version': string,
   'error.message': string,
   'reason': string,
-  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees'
+  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees'
 }
 ```
 
@@ -3063,7 +3227,7 @@ void
 
 ```typescript
 {
-  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees'
+  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees'
 }
 ```
 
@@ -3073,6 +3237,8 @@ void
 {
   'key': string,
   'prop': string,
+  // Whether this is just a warning or the gate was forcibly cleared
+  'status': 'warning' | 'aborted',
   'timeout': number
 }
 ```
@@ -3088,6 +3254,29 @@ void
 }
 ```
 
+### op/git/queueWait
+
+> Sent when a background git command waited in the queue
+
+```typescript
+{
+  // Number of active git processes when this command started
+  'active': number,
+  // Configured max concurrent processes
+  'maxConcurrent': number,
+  // Priority level of the command that waited
+  'priority': 'interactive' | 'normal' | 'background',
+  // Number of background commands queued
+  'queued.background': number,
+  // Number of interactive commands queued
+  'queued.interactive': number,
+  // Number of normal commands queued
+  'queued.normal': number,
+  // Time in ms the command waited in the queue before executing
+  'waitTime': number
+}
+```
+
 ### openReviewMode
 
 > Sent when a PR review was started in the inspect overview
@@ -3100,7 +3289,7 @@ void
   'repoPrivacy': 'private' | 'public' | 'local',
   'repository.visibility': 'private' | 'public' | 'local',
   // Provided for compatibility with other GK surfaces
-  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'welcome' | 'whatsnew' | 'worktrees'
+  'source': 'account' | 'subscription' | 'graph' | 'composer' | 'patchDetails' | 'settings' | 'timeline' | 'home' | 'welcome' | 'rebaseEditor' | 'ai' | 'ai:markdown-preview' | 'ai:markdown-editor' | 'ai:picker' | 'associateIssueWithBranch' | 'cloud-patches' | 'code-suggest' | 'commandPalette' | 'deeplink' | 'editor:hover' | 'feature-badge' | 'feature-gate' | 'gk-cli-integration' | 'gk-mcp-provider' | 'graph-details' | 'inspect' | 'inspect-overview' | 'integrations' | 'launchpad' | 'launchpad-indicator' | 'launchpad-view' | 'mcp' | 'mcp-welcome-message' | 'merge-target' | 'notification' | 'prompt' | 'quick-wizard' | 'remoteProvider' | 'scm' | 'scm-input' | 'startReview' | 'startWork' | 'statusbar:hover' | 'trial-indicator' | 'view' | 'view:hover' | 'walkthrough' | 'whatsnew' | 'worktrees'
 }
 ```
 
@@ -3635,7 +3824,9 @@ void
   'repository.id': string,
   'repository.provider.id': string,
   'repository.remoteProviders': string,
-  'repository.scheme': string
+  'repository.scheme': string,
+  'repository.submodules.openedCount': number,
+  'repository.worktrees.openedCount': number
 }
 ```
 
@@ -3690,6 +3881,105 @@ void
   'context.webview.type': string,
   'duration': number,
   'loading': boolean
+}
+```
+
+### startReview/action
+
+> Sent when the user chooses to manage integrations
+
+```typescript
+{
+  'instance': number,
+  'action': 'manage' | 'connect',
+  'connected': boolean,
+  'items.count': number
+}
+```
+
+### startReview/open
+
+> Sent when the user opens Start Review; use `instance` to correlate a StartReview "session"
+
+```typescript
+{
+  'instance': number
+}
+```
+
+### startReview/opened
+
+> Sent when the launchpad is opened; use `instance` to correlate a StartReview "session"
+
+```typescript
+{
+  'instance': number,
+  'connected': boolean,
+  'items.count': number
+}
+```
+
+### startReview/pr/action
+
+> Sent when the user takes an action on a Start Review PR
+
+```typescript
+{
+  'instance': number,
+  'action': 'soft-open',
+  'connected': boolean,
+  [`item.${string}`]: string | number | boolean,
+  'items.count': number
+}
+```
+
+### startReview/pr/chosen
+
+> Sent when the user chooses a PR to review in the second step
+
+```typescript
+{
+  'instance': number,
+  'connected': boolean,
+  [`item.${string}`]: string | number | boolean,
+  'items.count': number
+}
+```
+
+### startReview/steps/connect
+
+> Sent when the user reaches the "connect an integration" step of Start Review
+
+```typescript
+{
+  'instance': number,
+  'connected': boolean,
+  'items.count': number
+}
+```
+
+### startReview/steps/pr
+
+> Sent when the user reaches the "choose a PR" step of Start Review
+
+```typescript
+{
+  'instance': number,
+  'connected': boolean,
+  'items.count': number
+}
+```
+
+### startReview/title/action
+
+> Sent when the user chooses to connect an integration
+
+```typescript
+{
+  'instance': number,
+  'action': 'connect',
+  'connected': boolean,
+  'items.count': number
 }
 ```
 
@@ -4112,7 +4402,7 @@ or
 {
   'command': string,
   'detail': string,
-  'name': 'open/ai-custom-instructions-settings' | 'open/ai-enable-setting' | 'open/ai-settings' | 'open/help-center/ai-features' | 'open/help-center/accelerate-pr-reviews' | 'open/help-center/interactive-code-history' | 'open/help-center/community-vs-pro' | 'open/devex-platform' | 'open/drafts' | 'connect/integrations' | 'open/composer' | 'open/graph' | 'open/launchpad' | 'create/worktree' | 'open/help-center' | 'plus/sign-up' | 'plus/upgrade' | 'plus/reactivate' | 'open/walkthrough' | 'open/inspect' | 'switch/ai-model',
+  'name': 'open/ai-custom-instructions-settings' | 'open/ai-enable-setting' | 'open/ai-settings' | 'open/help-center/ai-features' | 'open/help-center/accelerate-pr-reviews' | 'open/help-center/interactive-code-history' | 'open/help-center/community-vs-pro' | 'open/devex-platform' | 'open/drafts' | 'connect/integrations' | 'open/composer' | 'open/graph' | 'open/launchpad' | 'create/worktree' | 'open/help-center' | 'plus/login' | 'plus/sign-up' | 'plus/upgrade' | 'plus/reactivate' | 'open/walkthrough' | 'open/inspect' | 'switch/ai-model',
   'type': 'command'
 }
 ```
@@ -4122,7 +4412,7 @@ or
 ```typescript
 {
   'detail': string,
-  'name': 'open/ai-custom-instructions-settings' | 'open/ai-enable-setting' | 'open/ai-settings' | 'open/help-center/ai-features' | 'open/help-center/accelerate-pr-reviews' | 'open/help-center/interactive-code-history' | 'open/help-center/community-vs-pro' | 'open/devex-platform' | 'open/drafts' | 'connect/integrations' | 'open/composer' | 'open/graph' | 'open/launchpad' | 'create/worktree' | 'open/help-center' | 'plus/sign-up' | 'plus/upgrade' | 'plus/reactivate' | 'open/walkthrough' | 'open/inspect' | 'switch/ai-model',
+  'name': 'open/ai-custom-instructions-settings' | 'open/ai-enable-setting' | 'open/ai-settings' | 'open/help-center/ai-features' | 'open/help-center/accelerate-pr-reviews' | 'open/help-center/interactive-code-history' | 'open/help-center/community-vs-pro' | 'open/devex-platform' | 'open/drafts' | 'connect/integrations' | 'open/composer' | 'open/graph' | 'open/launchpad' | 'create/worktree' | 'open/help-center' | 'plus/login' | 'plus/sign-up' | 'plus/upgrade' | 'plus/reactivate' | 'open/walkthrough' | 'open/inspect' | 'switch/ai-model',
   'type': 'url',
   'url': string
 }
@@ -4132,7 +4422,7 @@ or
 
 ```typescript
 {
-  'context.key': 'gettingStarted' | 'visualizeCodeHistory' | 'gitBlame' | 'prReviews' | 'aiFeatures'
+  'context.key': 'homeView' | 'gettingStarted' | 'visualizeCodeHistory' | 'gitBlame' | 'prReviews' | 'mcpFeatures' | 'aiFeatures'
 }
 ```
 
@@ -4142,9 +4432,68 @@ or
 
 ```typescript
 {
-  'name': 'plus/sign-up' | 'dismiss' | 'shown',
+  'name': 'shown' | 'dismiss',
   'proButtonClicked': boolean,
   'viewedCarouselPages': number
+}
+```
+
+or
+
+```typescript
+{
+  'command': string,
+  'name': 'open/help-center/community-vs-pro' | 'open/composer' | 'open/graph' | 'open/launchpad' | 'open/help-center' | 'plus/login' | 'plus/sign-up' | 'plus/upgrade' | 'plus/reactivate' | 'shown' | 'dismiss' | 'open/home-view',
+  'type': 'command'
+}
+```
+
+or
+
+```typescript
+{
+  'name': 'open/help-center/community-vs-pro' | 'open/composer' | 'open/graph' | 'open/launchpad' | 'open/help-center' | 'plus/login' | 'plus/sign-up' | 'plus/upgrade' | 'plus/reactivate' | 'shown' | 'dismiss' | 'open/home-view',
+  'type': 'url',
+  'url': string
+}
+```
+
+### welcome/closed
+
+```typescript
+{
+  [`context.${string}`]: string | number | boolean,
+  'context.webview.host': 'view' | 'editor',
+  'context.webview.id': string,
+  'context.webview.instanceId': string,
+  'context.webview.type': string
+}
+```
+
+### welcome/showAborted
+
+```typescript
+{
+  'context.webview.host': 'view' | 'editor',
+  'context.webview.id': string,
+  'context.webview.instanceId': string,
+  'context.webview.type': string,
+  'duration': number,
+  'loading': boolean
+}
+```
+
+### welcome/shown
+
+```typescript
+{
+  [`context.${string}`]: string | number | boolean,
+  'context.webview.host': 'view' | 'editor',
+  'context.webview.id': string,
+  'context.webview.instanceId': string,
+  'context.webview.type': string,
+  'duration': number,
+  'loading': boolean
 }
 ```
 

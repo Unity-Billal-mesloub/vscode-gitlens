@@ -106,6 +106,7 @@ type InternalWalkthroughCommands =
 	| 'gitlens.walkthrough.openInteractiveCodeHistory'
 	| 'gitlens.walkthrough.openLearnAboutAiFeatures'
 	| 'gitlens.walkthrough.openWalkthrough'
+	| 'gitlens.walkthrough.plus.login'
 	| 'gitlens.walkthrough.plus.signUp'
 	| 'gitlens.walkthrough.plus.upgrade'
 	| 'gitlens.walkthrough.plus.reactivate'
@@ -116,6 +117,18 @@ type InternalWalkthroughCommands =
 	| 'gitlens.walkthrough.switchAIProvider'
 	| 'gitlens.walkthrough.worktree.create'
 	| 'gitlens.walkthrough.openDevExPlatform';
+
+type InternalWelcomeCommands =
+	| 'gitlens.welcome.openCommunityVsPro'
+	| 'gitlens.welcome.openHelpCenter'
+	| 'gitlens.welcome.plus.login'
+	| 'gitlens.welcome.plus.reactivate'
+	| 'gitlens.welcome.plus.signUp'
+	| 'gitlens.welcome.plus.upgrade'
+	| 'gitlens.welcome.showComposer'
+	| 'gitlens.welcome.showGraph'
+	| 'gitlens.welcome.showHomeView'
+	| 'gitlens.welcome.showLaunchpad';
 
 type InternalGlCommands =
 	| `gitlens.action.${string}`
@@ -130,12 +143,14 @@ type InternalGlCommands =
 	| 'gitlens.diffWithPrevious:views'
 	| 'gitlens.diffWithWorking:command'
 	| 'gitlens.diffWithWorking:views'
+	| 'gitlens.openChatAction'
 	| 'gitlens.openCloudPatch'
 	| 'gitlens.openOnRemote'
 	| 'gitlens.openWalkthrough'
 	| 'gitlens.openWorkingFile:command'
 	| 'gitlens.refreshHover'
 	| 'gitlens.regenerateMarkdownDocument'
+	| 'gitlens.sendToChat'
 	| 'gitlens.showComposerPage'
 	| 'gitlens.showInCommitGraphView'
 	| 'gitlens.showQuickCommitDetails'
@@ -159,16 +174,26 @@ type InternalGlCommands =
 	| InternalScmGroupedViewCommands
 	| InternalTimelineWebviewViewCommands
 	| InternalViewCommands
-	| InternalWalkthroughCommands;
+	| InternalWalkthroughCommands
+	| InternalWelcomeCommands;
 
 export type GlCommands = ContributedCommands | InternalGlCommands; // | GlCommandsDeprecated;
 /** Non-webview commands */
 export type GlExtensionCommands = Exclude<GlCommands, GlWebviewCommands>;
 export type GlPaletteCommands = ContributedPaletteCommands;
 
+export type VendorChatCommands =
+	| 'composer.newAgentChat'
+	| 'kiroAgent.focusContinueInputWithoutClear'
+	| 'kiroAgent.newSession'
+	| 'windsurf.prioritized.chat.openNewConversation'
+	| 'workbench.action.icube.aiChatSidebar.createNewSession';
+
 export type CoreCommands =
 	| '_open.mergeEditor'
+	| 'composer.newAgentChat'
 	| 'cursorMove'
+	| 'editor.action.clipboardPasteAction'
 	| 'editor.action.showHover'
 	| 'editor.action.showReferences'
 	| 'editor.action.webvieweditor.showFind'
@@ -190,6 +215,7 @@ export type CoreCommands =
 	| 'vscode.executeDocumentSymbolProvider'
 	| 'vscode.moveViews'
 	| 'vscode.previewHtml'
+	| 'workbench.action.chat.open'
 	| 'workbench.action.closeActiveEditor'
 	| 'workbench.action.closeAllEditors'
 	| 'workbench.action.closePanel'
@@ -204,6 +230,8 @@ export type CoreCommands =
 	| 'workbench.action.toggleMaximizedPanel'
 	| 'workbench.action.focusPanel'
 	| 'workbench.action.togglePanel'
+	| 'workbench.extensions.action.extensionUpdates'
+	| 'workbench.extensions.action.installExtensions'
 	| 'workbench.extensions.action.switchToRelease'
 	| 'workbench.extensions.installExtension'
 	| 'workbench.extensions.uninstallExtension'
@@ -211,6 +239,7 @@ export type CoreCommands =
 	| 'workbench.view.explorer'
 	| 'workbench.view.extension.gitlensInspect'
 	| 'workbench.view.scm'
+	| VendorChatCommands
 	| `${ViewContainerIds | CoreViewContainerIds}.resetViewContainerLocation`
 	| `${ViewIds}.${'focus' | 'open' | 'removeView' | 'resetViewLocation' | 'toggleVisibility'}`;
 

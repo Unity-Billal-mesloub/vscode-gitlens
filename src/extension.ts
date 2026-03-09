@@ -1,7 +1,6 @@
 import type { ExtensionContext } from 'vscode';
-import { version as codeVersion, env, ExtensionMode, Uri, window, workspace } from 'vscode';
+import { version as codeVersion, env, ExtensionMode, LogLevel, Uri, window, workspace } from 'vscode';
 import { hrtime } from '@env/hrtime.js';
-import { loggingJsonReplacer } from '@env/json.js';
 import { isWeb } from '@env/platform.js';
 import { Api } from './api/api.js';
 import type {
@@ -13,15 +12,10 @@ import type {
 import type { CreatePullRequestOnRemoteCommandArgs } from './commands/createPullRequestOnRemote.js';
 import type { OpenIssueOnRemoteCommandArgs } from './commands/openIssueOnRemote.js';
 import type { OpenPullRequestOnRemoteCommandArgs } from './commands/openPullRequestOnRemote.js';
-import { fromOutputLevel } from './config.js';
 import { trackableSchemes } from './constants.js';
 import { SyncedStorageKeys } from './constants.storage.js';
 import { Container } from './container.js';
 import { isGitUri } from './git/gitUri.js';
-import { isBranch } from './git/models/branch.js';
-import { isCommit } from './git/models/commit.js';
-import { isRepository } from './git/models/repository.js';
-import { isTag } from './git/models/tag.js';
 import { getBranchNameWithoutRemote } from './git/utils/branch.utils.js';
 import { setAbbreviatedShaLength } from './git/utils/revision.utils.js';
 import {
@@ -41,11 +35,12 @@ import { isWorkspaceFolder } from './system/-webview/vscode/workspaces.js';
 import { deviceCohortGroup, getExtensionModeLabel } from './system/-webview/vscode.js';
 import { setDefaultDateLocales } from './system/date.js';
 import { once } from './system/event.js';
-import { BufferedLogChannel, getLoggableName, Logger } from './system/logger.js';
+import { fnv1aHash } from './system/hash.js';
+import { isLoggable } from './system/loggable.js';
+import { getLoggableName, Logger } from './system/logger.js';
 import { flatten } from './system/object.js';
 import { Stopwatch } from './system/stopwatch.js';
 import { compare, fromString, satisfies } from './system/version.js';
-import { isViewNode } from './views/nodes/utils/-webview/node.utils.js';
 import './commands.js';
 
 export async function activate(context: ExtensionContext): Promise<GitLensApi | undefined> {
@@ -53,28 +48,17 @@ export async function activate(context: ExtensionContext): Promise<GitLensApi | 
 	const prerelease = satisfies(gitlensVersion, '> 2020.0.0');
 
 	const defaultDateLocale = configuration.get('defaultDateLocale');
-	const logLevel = fromOutputLevel(configuration.get('outputLevel'));
 	Logger.configure(
 		{
 			name: 'GitLens',
 			createChannel: function (name: string) {
-				const channel = new BufferedLogChannel(window.createOutputChannel(name, { log: true }), 500);
+				const channel = window.createOutputChannel(name, { log: true });
 				context.subscriptions.push(channel);
 
-				if (logLevel === 'error' || logLevel === 'warn') {
+				// Show message if debug logging is not enabled (level > Debug)
+				if (channel.logLevel === LogLevel.Off || channel.logLevel > LogLevel.Debug) {
 					channel.appendLine(
-						`GitLens${prerelease ? ' (pre-release)' : ''} v${gitlensVersion} activating in ${
-							env.appName
-						} (${codeVersion}) on the ${isWeb ? 'web' : 'desktop'}; mode=${getExtensionModeLabel(
-							context.extensionMode,
-						)}, language='${
-							env.language
-						}', logLevel='${logLevel}', defaultDateLocale='${defaultDateLocale}' (${env.uriScheme}|${env.machineId}|${
-							env.sessionId
-						})`,
-					);
-					channel.appendLine(
-						'To enable debug logging, set `"gitlens.outputLevel": "debug"` or run "GitLens: Enable Debug Logging" from the Command Palette',
+						'To enable debug logging, run "GitLens: Enable Debug Logging" or "Developer: Set Log Level..." from the Command Palette',
 					);
 				}
 				return channel;
@@ -86,8 +70,7 @@ export async function activate(context: ExtensionContext): Promise<GitLensApi | 
 					})`;
 				}
 				if (o instanceof Uri) return `Uri(${o.toString(true)})`;
-
-				if (isRepository(o) || isBranch(o) || isCommit(o) || isTag(o) || isViewNode(o)) return o.toString();
+				if (isLoggable(o)) return o.toLoggable();
 
 				if ('rootUri' in o && o.rootUri instanceof Uri) {
 					return `ScmRepository(${o.rootUri.toString(true)})`;
@@ -113,19 +96,21 @@ export async function activate(context: ExtensionContext): Promise<GitLensApi | 
 
 				return undefined;
 			},
-			sanitizer: loggingJsonReplacer,
+			hash: function (data: string) {
+				return (fnv1aHash(data) >>> 0).toString(16).padStart(8, '0').slice(0, 4);
+			},
 		},
-		logLevel,
 		context.extensionMode === ExtensionMode.Development,
 	);
 
 	const sw = new Stopwatch(`GitLens${prerelease ? ' (pre-release)' : ''} v${gitlensVersion}`, {
 		log: {
+			level: 'error',
 			message: ` activating in ${env.appName} (${codeVersion}) on the ${isWeb ? 'web' : 'desktop'}; mode=${getExtensionModeLabel(
 				context.extensionMode,
 			)},language='${
 				env.language
-			}', logLevel='${logLevel}', defaultDateLocale='${defaultDateLocale}' (${env.uriScheme}|${env.machineId}|${
+			}', logLevel='${Logger.logLevel}', defaultDateLocale='${defaultDateLocale}' (${env.uriScheme}|${env.machineId}|${
 				env.sessionId
 			})`,
 		},
@@ -177,7 +162,7 @@ export async function activate(context: ExtensionContext): Promise<GitLensApi | 
 	}
 
 	let exitMessage;
-	if (Logger.enabled('debug')) {
+	if (Logger.enabled('trace')) {
 		exitMessage = `syncedVersion=${syncedVersion}, localVersion=${localVersion}, previousVersion=${previousVersion}`;
 	}
 
@@ -223,9 +208,9 @@ export async function activate(context: ExtensionContext): Promise<GitLensApi | 
 			void storage.store(prerelease ? 'synced:preVersion' : 'synced:version', gitlensVersion).catch();
 		}
 
-		if (logLevel === 'debug') {
+		if (Logger.enabled('trace')) {
 			setTimeout(async () => {
-				if (fromOutputLevel(configuration.get('outputLevel')) !== 'debug') return;
+				if (!Logger.enabled('trace')) return;
 
 				if (!container.prereleaseOrDebugging) {
 					if (await showDebugLoggingWarningMessage()) {
@@ -292,7 +277,7 @@ export async function activate(context: ExtensionContext): Promise<GitLensApi | 
 }
 
 export function deactivate(): void {
-	Logger.log('GitLens deactivating...');
+	Logger.info('GitLens deactivating...');
 	Container.instance.deactivate();
 }
 
@@ -364,13 +349,13 @@ async function showWhatsNew(
 	previousVersion: string | undefined,
 ) {
 	if (previousVersion == null) {
-		Logger.log(`GitLens first-time install; window.focused=${window.state.focused}`);
+		Logger.info(`GitLens first-time install; window.focused=${window.state.focused}`);
 
 		return;
 	}
 
 	if (previousVersion !== version) {
-		Logger.log(`GitLens upgraded from v${previousVersion} to v${version}; window.focused=${window.state.focused}`);
+		Logger.info(`GitLens upgraded from v${previousVersion} to v${version}; window.focused=${window.state.focused}`);
 	}
 
 	const current = fromString(version);

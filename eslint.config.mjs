@@ -6,11 +6,13 @@ import js from '@eslint/js';
 import ts from 'typescript-eslint';
 import antiTrojanSource from 'eslint-plugin-anti-trojan-source';
 import { createCustomTypeScriptImportResolver } from './scripts/eslint-import-resolver-ts.mjs';
+import e18e from '@e18e/eslint-plugin';
 import importX from 'eslint-plugin-import-x';
 import { configs as litConfigs } from 'eslint-plugin-lit';
 import { configs as wcConfigs } from 'eslint-plugin-wc';
 import noSrcImports from './scripts/eslint-rules/no-src-imports.mjs';
 import noEnvWithoutJs from './scripts/eslint-rules/no-env-without-js.mjs';
+import logScopeUsage from './scripts/eslint-rules/scoped-logger-usage.mjs';
 import reactCompiler from 'eslint-plugin-react-compiler';
 import { fileURLToPath } from 'node:url';
 
@@ -156,6 +158,7 @@ export default defineConfig(
 	{ ignores: ignorePatterns.default },
 	js.configs.recommended,
 	...ts.configs.strictTypeChecked,
+	e18e.configs.recommended,
 	{
 		name: 'all',
 		files: [...filePatterns.src, ...filePatterns.tests],
@@ -167,12 +170,19 @@ export default defineConfig(
 			// @ts-ignore
 			'anti-trojan-source': antiTrojanSource,
 			// @ts-ignore
-			'@gitlens': { rules: { 'no-src-imports': noSrcImports, 'no-env-without-js': noEnvWithoutJs } },
+			'@gitlens': {
+				rules: {
+					'no-src-imports': noSrcImports,
+					'no-env-without-js': noEnvWithoutJs,
+					'scoped-logger-usage': logScopeUsage,
+				},
+			},
 		},
 		rules: {
 			// Custom rules
 			'@gitlens/no-src-imports': 'error',
 			'@gitlens/no-env-without-js': 'error',
+			'@gitlens/scoped-logger-usage': 'error',
 			'anti-trojan-source/no-bidi': 'error',
 
 			// Core JavaScript rules
@@ -265,6 +275,8 @@ export default defineConfig(
 					message: 'Single-line for-of statements are not allowed.',
 				},
 			],
+
+			'e18e/prefer-static-regex': 'off',
 
 			// Import rules
 			'import-x/consistent-type-specifier-style': ['error', 'prefer-top-level'],
@@ -466,7 +478,7 @@ export default defineConfig(
 		name: 'tests:e2e',
 		files: filePatterns.tests,
 		languageOptions: { ...defaultLanguageOptions, globals: { ...globals.node } },
-		rules: { '@typescript-eslint/no-restricted-imports': 'off' },
+		rules: { 'e18e/prefer-static-regex': 'off', '@typescript-eslint/no-restricted-imports': 'off' },
 	},
 
 	// Unit Tests

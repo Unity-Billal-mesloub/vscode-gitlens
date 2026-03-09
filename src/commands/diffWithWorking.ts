@@ -3,10 +3,10 @@ import { window } from 'vscode';
 import type { Container } from '../container.js';
 import type { DiffRange } from '../git/gitProvider.js';
 import { GitUri } from '../git/gitUri.js';
-import { deletedOrMissing, uncommittedStaged } from '../git/models/revision.js';
-import { createReference } from '../git/utils/reference.utils.js';
+import { deletedOrMissing, uncommitted, uncommittedStaged } from '../git/models/revision.js';
+import { shortenRevision } from '../git/utils/revision.utils.js';
 import { showGenericErrorMessage } from '../messages.js';
-import { showRevisionFilesPicker } from '../quickpicks/revisionFilesPicker.js';
+import { showWorkingFilesPicker } from '../quickpicks/workingFilesPicker.js';
 import { command, executeCommand } from '../system/-webview/command.js';
 import { getOrOpenTextEditor, selectionToDiffRange } from '../system/-webview/vscode/editors.js';
 import { getTabUris, getVisibleTabs } from '../system/-webview/vscode/tabs.js';
@@ -96,8 +96,8 @@ export class DiffWithWorkingCommand extends ActiveEditorCommand {
 			if (status?.indexStatus != null) {
 				void (await executeCommand<DiffWithCommandArgs>('gitlens.diffWith', {
 					repoPath: gitUri.repoPath,
-					lhs: { sha: uncommittedStaged, uri: gitUri.documentUri() },
-					rhs: { sha: '', uri: gitUri.documentUri() },
+					lhs: { sha: uncommittedStaged, uri: gitUri.documentUri },
+					rhs: { sha: '', uri: gitUri.documentUri },
 					range: args.range,
 					showOptions: args.showOptions,
 				}));
@@ -106,11 +106,11 @@ export class DiffWithWorkingCommand extends ActiveEditorCommand {
 			}
 		}
 
-		uri = gitUri.toFileUri();
+		uri = gitUri.workingFileUri;
 
 		let workingUri = await svc.getWorkingUri(uri);
 		if (workingUri == null) {
-			const picked = await showRevisionFilesPicker(this.container, createReference('HEAD', gitUri.repoPath!), {
+			const picked = await showWorkingFilesPicker(this.container, gitUri.repoPath!, {
 				ignoreFocusOut: true,
 				initialPath: gitUri.relativePath,
 				title: `Open File \u2022 Unable to open '${gitUri.relativePath}'`,
@@ -124,20 +124,35 @@ export class DiffWithWorkingCommand extends ActiveEditorCommand {
 			});
 			if (picked == null) return;
 
-			workingUri = picked?.uri;
+			workingUri = picked.uri;
+		}
+
+		// For submodules, getWorkingUri returns a gitlens:// URI with the working submodule SHA
+		const submoduleDiff = gitUri.sha
+			? await svc.getSubmoduleDiffUris(workingUri, gitUri.relativePath, gitUri.sha)
+			: undefined;
+		if (submoduleDiff) {
+			void (await executeCommand<DiffWithCommandArgs>('gitlens.diffWith', {
+				repoPath: gitUri.repoPath,
+				lhs: {
+					sha: submoduleDiff.lhsSha,
+					uri: submoduleDiff.lhsUri,
+					title: args?.lhsTitle ?? `${gitUri.relativePath} (${shortenRevision(submoduleDiff.lhsSha)})`,
+				},
+				rhs: {
+					sha: uncommitted,
+					uri: submoduleDiff.rhsUri,
+					title: `${gitUri.relativePath} (${shortenRevision(uncommitted)})`,
+				},
+				showOptions: args.showOptions,
+			}));
+			return;
 		}
 
 		void (await executeCommand<DiffWithCommandArgs>('gitlens.diffWith', {
 			repoPath: gitUri.repoPath,
-			lhs: {
-				sha: gitUri.sha,
-				uri: uri,
-				title: args?.lhsTitle,
-			},
-			rhs: {
-				sha: '',
-				uri: workingUri,
-			},
+			lhs: { sha: gitUri.sha, uri: uri, title: args?.lhsTitle },
+			rhs: { sha: '', uri: workingUri },
 			range: args.range,
 			showOptions: args.showOptions,
 		}));

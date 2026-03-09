@@ -1,4 +1,7 @@
-import { arch } from 'process';
+import { mkdir, unlink, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { arch, ppid } from 'process';
 import type { ConfigurationChangeEvent } from 'vscode';
 import { version as codeVersion, Disposable, env, ProgressLocation, Uri, window, workspace } from 'vscode';
 import { urls } from '../../../../constants.js';
@@ -10,18 +13,26 @@ import { mcpExtensionRegistrationAllowed } from '../../../../plus/gk/utils/-webv
 import { registerCommand } from '../../../../system/-webview/command.js';
 import { configuration } from '../../../../system/-webview/configuration.js';
 import { setContext } from '../../../../system/-webview/context.js';
-import { exists, openUrl } from '../../../../system/-webview/vscode/uris.js';
+import { openUrl } from '../../../../system/-webview/vscode/uris.js';
 import { getHostAppName, isHostVSCode } from '../../../../system/-webview/vscode.js';
 import { gate } from '../../../../system/decorators/gate.js';
-import { debug, log } from '../../../../system/decorators/log.js';
+import { debug, trace } from '../../../../system/decorators/log.js';
 import { Logger } from '../../../../system/logger.js';
-import { getLogScope, setLogScopeExit } from '../../../../system/logger.scope.js';
-import { compare } from '../../../../system/version.js';
+import { formatLoggableScopeBlock, getScopedLogger } from '../../../../system/logger.scope.js';
+import { compare, fromString, satisfies } from '../../../../system/version.js';
 import { getPlatform, isOffline, isWeb } from '../../platform.js';
 import { CliCommandHandlers } from './commands.js';
 import type { IpcServer } from './ipcServer.js';
 import { createIpcServer } from './ipcServer.js';
-import { extractZipFile, runCLICommand, showManualMcpSetupPrompt, toMcpInstallProvider } from './utils.js';
+import {
+	extractZipFile,
+	getCLIExecutable,
+	getCLIVersions,
+	resolveCLIExecutable,
+	runCLICommand,
+	showManualMcpSetupPrompt,
+	toMcpInstallProvider,
+} from './utils.js';
 
 const enum CLIInstallErrorReason {
 	UnsupportedPlatform,
@@ -66,17 +77,19 @@ const maxAutoInstallAttempts = 5;
 export class GkCliIntegrationProvider implements Disposable {
 	private readonly _disposable: Disposable;
 	private _runningDisposable: Disposable | undefined;
+	private _discoveryFilePath: string | undefined;
+	private _cliCoreVersion: string | undefined;
 
 	constructor(private readonly container: Container) {
 		this._disposable = Disposable.from(
 			configuration.onDidChange(e => this.onConfigurationChanged(e)),
 			this.container.subscription.onDidChange(this.onSubscriptionChanged, this),
 			...this.registerCommands(),
+			this.container.onReady(() => {
+				this.onConfigurationChanged();
+				void this.ensureUpdateOrInstall();
+			}),
 		);
-
-		this.onConfigurationChanged();
-
-		this.ensureAutoInstall();
 	}
 
 	dispose(): void {
@@ -86,16 +99,39 @@ export class GkCliIntegrationProvider implements Disposable {
 
 	private onConfigurationChanged(e?: ConfigurationChangeEvent): void {
 		if (e == null || configuration.changed(e, 'gitkraken.cli.integration.enabled')) {
-			if (!configuration.get('gitkraken.cli.integration.enabled')) {
+			if (!this.supportsCliIntegration()) {
 				this.stop();
 			} else {
 				void this.start();
 			}
 		}
+
+		// Reinstall CLI when insiders setting changes
+		if (e != null && configuration.changed(e, 'gitkraken.cli.insiders.enabled')) {
+			const cliInstall = this.container.storage.getScoped('gk:cli:install');
+			if (cliInstall?.status === 'completed') {
+				// Force reinstall to switch between production and insiders
+				Logger.info(
+					`${formatLoggableScopeBlock('CLI')} Forcing CLI reinstall on settings change (insiders = ${configuration.get('gitkraken.cli.insiders.enabled')})`,
+				);
+				void this.setupMCPCore('settings', true, true).catch(() => {});
+			}
+		}
+	}
+
+	private supportsCliIntegration(): boolean {
+		return (
+			this.container.ai.enabled &&
+			(configuration.get('gitkraken.mcp.autoEnabled') || configuration.get('gitkraken.cli.integration.enabled'))
+		);
 	}
 
 	private async start() {
 		const server = await createIpcServer<CliCommandRequest, CliCommandResponse>();
+
+		server.registerHandler('ping', () =>
+			Promise.resolve({ stdout: JSON.stringify({ version: this.container.version }) }),
+		);
 
 		const { environmentVariableCollection: envVars } = this.container.context;
 
@@ -104,38 +140,99 @@ export class GkCliIntegrationProvider implements Disposable {
 		envVars.replace('GK_GL_ADDR', server.ipcAddress);
 		envVars.description = 'Enables GK CLI integration';
 
+		// Create discovery file for external terminal support
+		try {
+			const workspaceFolders = workspace.workspaceFolders;
+			if (workspaceFolders != null && workspaceFolders.length > 0) {
+				const workspacePaths = workspaceFolders.map(folder => folder.uri.fsPath);
+				this._discoveryFilePath = await createDiscoveryFile(server, workspacePaths);
+
+				envVars.replace('GK_GL_PATH', this._discoveryFilePath);
+			}
+		} catch (error) {
+			// Discovery file creation failure should not prevent IPC server startup
+			Logger.warn(`${formatLoggableScopeBlock('IPC')} Failed to create discovery file: ${error}`);
+		}
+
 		this._runningDisposable = Disposable.from(new CliCommandHandlers(this.container, server), server);
+
+		// Notify that the IPC server is ready so MCP providers can refresh
+		this.container.events.fire('gk:cli:ipc:started', undefined);
+		Logger.info(`${formatLoggableScopeBlock('IPC')} Server started on ${server.ipcAddress}`);
 	}
 
 	private stop() {
-		this.container.context.environmentVariableCollection.clear();
-		this._runningDisposable?.dispose();
-		this._runningDisposable = undefined;
-	}
-
-	private ensureAutoInstall() {
-		const cliInstall = this.container.storage.getScoped('gk:cli:install');
-		if (cliInstall?.status === 'completed') {
-			void setContext('gitlens:gk:cli:installed', true);
-			return;
+		// Cleanup discovery file
+		if (this._discoveryFilePath) {
+			void cleanupDiscoveryFile(this._discoveryFilePath);
+			this._discoveryFilePath = undefined;
 		}
 
+		this.container.context.environmentVariableCollection.clear();
+		if (this._runningDisposable != null) {
+			this._runningDisposable.dispose();
+			this._runningDisposable = undefined;
+			Logger.info(`${formatLoggableScopeBlock('IPC')} Server stopped`);
+		}
+	}
+
+	private async ensureUpdateOrInstall() {
+		let forceInstall = false;
+		const versionDidChange = this.container.version !== this.container.previousVersion;
+
+		const cliInstall = this.container.storage.getScoped('gk:cli:install');
+		if (cliInstall?.status === 'completed') {
+			// Verify the binary exists before spawning `gk version`.
+			if (!(await resolveCLIExecutable())) {
+				Logger.warn(`${formatLoggableScopeBlock('CLI')} CLI binary missing at startup — forcing reinstall`);
+				forceInstall = true;
+			} else {
+				const { needsUpdate, core, proxy } = await this.checkCliUpdateRequired();
+				let currentCoreVersion = core;
+				if (needsUpdate !== undefined) {
+					Logger.info(
+						`${formatLoggableScopeBlock('CLI')} CLI ${needsUpdate} version ${(needsUpdate === 'core' ? currentCoreVersion : proxy) ?? 'unknown'} is outdated, forcing reinstall`,
+					);
+					forceInstall = true;
+				} else {
+					// Only update if GitLens extension version has changed since last check, to avoid unnecessary update checks
+					if (versionDidChange) {
+						const updateResult = await this.updateCliCore();
+						if (updateResult?.current != null) {
+							currentCoreVersion = updateResult.current;
+						}
+					}
+
+					if (currentCoreVersion != null) {
+						Logger.info(`${formatLoggableScopeBlock('CLI')} CLI core version is ${currentCoreVersion}`);
+						void setContext('gitlens:gk:cli:installed', true);
+						return;
+					}
+				}
+			}
+		}
+
+		const didReachMaxAttempts = reachedMaxAttempts(cliInstall);
+
 		// Reset the attempts count if GitLens extension version has changed
-		if (reachedMaxAttempts(cliInstall) && this.container.version !== this.container.previousVersion) {
+		if (forceInstall || (didReachMaxAttempts && versionDidChange)) {
 			void this.container.storage.storeScoped('gk:cli:install', undefined);
 		}
 
-		if (!mcpExtensionRegistrationAllowed(this.container) || reachedMaxAttempts(cliInstall)) {
+		const shouldAutoInstall = mcpExtensionRegistrationAllowed(this.container) && !didReachMaxAttempts;
+		if (!forceInstall && !shouldAutoInstall) {
 			return;
 		}
 
 		// Setup MCP, but handle errors silently
-		void this.setupMCPCore('gk-cli-integration', false, true).catch(() => {});
+		void this.setupMCPCore('gk-cli-integration', forceInstall, shouldAutoInstall).catch(() => {});
 	}
 
 	@gate()
-	@log({ exit: true })
+	@debug({ exit: true })
 	private async setupMCP(source?: Sources, force = false): Promise<void> {
+		const scope = getScopedLogger();
+
 		await this.container.storage.store('mcp:banner:dismissed', true);
 
 		try {
@@ -145,9 +242,7 @@ export class GkCliIntegrationProvider implements Disposable {
 					title: 'Setting up the GitKraken MCP...',
 					cancellable: false,
 				},
-				async () => {
-					return this.setupMCPCore(source, force);
-				},
+				async () => this.setupMCPCore(source, force),
 			);
 
 			if (result.requiresUserCompletion) {
@@ -170,6 +265,7 @@ export class GkCliIntegrationProvider implements Disposable {
 					});
 			}
 		} catch (ex) {
+			scope?.error(ex, `Error during MCP setup: ${ex instanceof Error ? ex.message : 'Unknown error'}`);
 			if (ex instanceof McpSetupError) {
 				switch (ex.reason) {
 					case McpSetupErrorReason.WebUnsupported:
@@ -200,7 +296,7 @@ export class GkCliIntegrationProvider implements Disposable {
 		}
 	}
 
-	@log({ exit: true })
+	@debug({ exit: true })
 	private async setupMCPCore(
 		source?: Sources,
 		force = false,
@@ -211,7 +307,7 @@ export class GkCliIntegrationProvider implements Disposable {
 		usingExtensionRegistration?: boolean;
 		url?: string;
 	}> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 		const commandSource = source ?? 'commandPalette';
 
 		if (this.container.telemetry.enabled) {
@@ -220,7 +316,7 @@ export class GkCliIntegrationProvider implements Disposable {
 
 		try {
 			if (isWeb) {
-				setLogScopeExit(scope, 'GitKraken MCP setup is not supported on the web');
+				scope?.addExitInfo('GitKraken MCP setup is not supported on the web');
 				throw new McpSetupError(
 					McpSetupErrorReason.WebUnsupported,
 					'GitKraken MCP setup is not supported on the web.',
@@ -257,7 +353,7 @@ export class GkCliIntegrationProvider implements Disposable {
 			const cliPath = installedPath;
 
 			if (cliPath == null) {
-				setLogScopeExit(scope, undefined, 'GitKraken MCP setup failed; installation failed');
+				scope?.setFailed('GitKraken MCP setup failed; installation failed');
 				throw new McpSetupError(
 					McpSetupErrorReason.InstallationFailed,
 					'Unable to setup the GitKraken MCP: installation failed. Please try again.',
@@ -270,7 +366,7 @@ export class GkCliIntegrationProvider implements Disposable {
 
 			// If MCP extension registration is supported, don't proceed with manual setup
 			if (usingExtensionRegistration) {
-				setLogScopeExit(scope, 'supports provider-based MCP registration');
+				scope?.addExitInfo('supports provider-based MCP registration');
 				// Send success telemetry
 				if (this.container.telemetry.enabled) {
 					this.container.telemetry.sendEvent('mcp/setup/completed', {
@@ -279,6 +375,9 @@ export class GkCliIntegrationProvider implements Disposable {
 						'cli.version': cliVersion,
 					});
 				}
+
+				this.container.events.fire('gk:cli:mcp:setup:completed', undefined);
+
 				return {
 					cliVersion: cliVersion,
 					usingExtensionRegistration: true,
@@ -287,7 +386,7 @@ export class GkCliIntegrationProvider implements Disposable {
 
 			const mcpInstallAppName = toMcpInstallProvider(hostAppName);
 			if (mcpInstallAppName == null) {
-				setLogScopeExit(scope, undefined, `GitKraken MCP setup failed; unsupported host: ${hostAppName}`);
+				scope?.setFailed(`GitKraken MCP setup failed; unsupported host: ${hostAppName}`);
 				throw new McpSetupError(
 					McpSetupErrorReason.UnsupportedHost,
 					'Automatic setup of the GitKraken MCP is not currently supported in this IDE. You may be able to configure it by adding the GitKraken MCP to your configuration manually.',
@@ -297,6 +396,7 @@ export class GkCliIntegrationProvider implements Disposable {
 				);
 			}
 
+			scope?.trace(`Running MCP install command for ${mcpInstallAppName}`);
 			let output = await runCLICommand(
 				['mcp', 'install', mcpInstallAppName, '--source=gitlens', `--scheme=${env.uriScheme}`],
 				{
@@ -306,6 +406,7 @@ export class GkCliIntegrationProvider implements Disposable {
 
 			output = output.replace(CLIProxyMCPInstallOutputs.checkingForUpdates, '').trim();
 			if (CLIProxyMCPInstallOutputs.installedSuccessfully.test(output)) {
+				scope?.addExitInfo(`(version: ${cliVersion})`);
 				// Send success telemetry
 				if (this.container.telemetry.enabled) {
 					this.container.telemetry.sendEvent('mcp/setup/completed', {
@@ -318,7 +419,7 @@ export class GkCliIntegrationProvider implements Disposable {
 					cliVersion: cliVersion,
 				};
 			} else if (CLIProxyMCPInstallOutputs.notASupportedClient.test(output)) {
-				setLogScopeExit(scope, undefined, `GitKraken MCP setup failed; unsupported host: ${hostAppName}`);
+				scope?.setFailed(`GitKraken MCP setup failed; unsupported host: ${hostAppName}`);
 				throw new McpSetupError(
 					McpSetupErrorReason.UnsupportedClient,
 					'Automatic setup of the GitKraken MCP is not currently supported in this IDE. You should be able to configure it by adding the GitKraken MCP to your configuration manually.',
@@ -333,8 +434,8 @@ export class GkCliIntegrationProvider implements Disposable {
 			try {
 				new URL(output);
 			} catch {
-				setLogScopeExit(scope, undefined, `GitKraken MCP setup failed; unexpected output from mcp install`);
-				Logger.error(undefined, scope, `Unexpected output from mcp install command: ${output}`);
+				scope?.setFailed(`GitKraken MCP setup failed; unexpected output from mcp install`);
+				scope?.error(undefined, `Unexpected output from mcp install command: ${output}`);
 				throw new McpSetupError(
 					McpSetupErrorReason.UnexpectedOutput,
 					'Unable to setup the GitKraken MCP. If this issue persists, please try adding the GitKraken MCP to your configuration manually.',
@@ -345,6 +446,7 @@ export class GkCliIntegrationProvider implements Disposable {
 				);
 			}
 
+			scope?.addExitInfo(`requires user action (version: ${cliVersion})`);
 			if (this.container.telemetry.enabled) {
 				this.container.telemetry.sendEvent('mcp/setup/completed', {
 					requiresUserCompletion: true,
@@ -358,7 +460,7 @@ export class GkCliIntegrationProvider implements Disposable {
 				url: output,
 			};
 		} catch (ex) {
-			Logger.error(ex, scope, `Error during MCP installation: ${ex}`);
+			scope?.error(ex, `Error during MCP installation: ${ex}`);
 
 			let telemetryReason: string;
 			let telemetryErrorMessage: string | undefined = ex.message;
@@ -429,38 +531,40 @@ export class GkCliIntegrationProvider implements Disposable {
 	}
 
 	@gate()
-	@log({ exit: true })
+	@debug({ exit: true })
 	private async installCLI(
 		autoInstall?: boolean,
 		source?: Sources,
 		force = false,
 	): Promise<{ cliVersion?: string; cliPath?: string; status: 'completed' | 'unsupported' | 'attempted' }> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const cliInstall = this.container.storage.getScoped('gk:cli:install');
 		let cliInstallAttempts = force ? 0 : (cliInstall?.attempts ?? 0);
 		let cliInstallStatus = cliInstall?.status ?? 'attempted';
 		let cliVersion = cliInstall?.version;
-		let cliPath = this.container.storage.getScoped('gk:cli:path');
+		const cliPath = this.container.context.globalStorageUri.fsPath;
 		const platform = getPlatform();
 
 		if (!force) {
 			if (cliInstallStatus === 'completed') {
-				if (cliPath != null) {
-					cliVersion = cliInstall?.version;
-					if (await exists(Uri.joinPath(Uri.file(cliPath), platform === 'windows' ? 'gk.exe' : 'gk'))) {
-						return { cliVersion: cliVersion, cliPath: cliPath, status: 'completed' };
-					}
+				cliVersion = cliInstall?.version;
+				if (await resolveCLIExecutable(cliPath)) {
+					return { cliVersion: cliVersion, cliPath: cliPath, status: 'completed' };
 				}
+				scope?.warn(`CLI binary not found at expected path: ${getCLIExecutable(cliPath).fsPath}`);
 
 				cliInstallStatus = 'attempted';
 				cliVersion = undefined;
 			} else if (cliInstallStatus === 'unsupported') {
 				return { cliVersion: undefined, cliPath: undefined, status: 'unsupported' };
 			} else if (autoInstall && reachedMaxAttempts({ status: cliInstallStatus, attempts: cliInstallAttempts })) {
+				scope?.warn(`Skipping auto-install, reached max attempts (${cliInstallAttempts})`);
 				return { cliVersion: undefined, cliPath: undefined, status: 'attempted' };
 			}
 		}
+
+		const insidersEnabled = configuration.get('gitkraken.cli.insiders.enabled');
 
 		try {
 			if (isWeb) {
@@ -477,13 +581,14 @@ export class GkCliIntegrationProvider implements Disposable {
 			if (isOffline) {
 				throw new CLIInstallError(CLIInstallErrorReason.Offline);
 			}
-
 			cliInstallAttempts += 1;
+			scope?.info(`Starting CLI installation (attempt ${cliInstallAttempts}/${maxAutoInstallAttempts})`);
 			if (this.container.telemetry.enabled) {
 				this.container.telemetry.sendEvent('cli/install/started', {
 					source: source,
 					autoInstall: autoInstall ?? false,
 					attempts: cliInstallAttempts,
+					insiders: insidersEnabled,
 				});
 			}
 			void this.container.storage
@@ -542,7 +647,7 @@ export class GkCliIntegrationProvider implements Disposable {
 					Uri.parse('https://api.gitkraken.dev'),
 					'releases',
 					'gkcli-proxy',
-					'production',
+					insidersEnabled ? 'insiders' : 'production',
 					platformName,
 					architecture,
 					'active',
@@ -556,6 +661,9 @@ export class GkCliIntegrationProvider implements Disposable {
 					'active',
 				); */
 
+				scope?.trace(
+					`Fetching CLI proxy: platform=${platformName}, arch=${architecture}, edition=${insidersEnabled ? 'insiders' : 'production'}`,
+				);
 				let response = await fetch(proxyUrl);
 				if (!response.ok) {
 					throw new CLIInstallError(
@@ -587,6 +695,7 @@ export class GkCliIntegrationProvider implements Disposable {
 					);
 				}
 
+				scope?.trace(`Downloading CLI proxy (version: ${cliVersion})`);
 				response = await fetch(downloadUrl);
 				if (!response.ok) {
 					throw new CLIInstallError(
@@ -642,8 +751,6 @@ export class GkCliIntegrationProvider implements Disposable {
 
 					// This will throw if the file doesn't exist
 					await workspace.fs.stat(cliExtractedProxyFilePath);
-					void this.container.storage.storeScoped('gk:cli:path', globalStorageUri.fsPath).catch();
-					cliPath = globalStorageUri.fsPath;
 				} catch (ex) {
 					throw new CLIInstallError(
 						CLIInstallErrorReason.ProxyExtract,
@@ -652,19 +759,17 @@ export class GkCliIntegrationProvider implements Disposable {
 					);
 				}
 
-				// Set up the local MCP server files
 				try {
-					const coreInstallOutput = await runCLICommand(['install'], { cwd: globalStorageUri.fsPath });
-					const directory = coreInstallOutput.match(/Directory: (.*)/);
-					let directoryPath;
-					if (directory != null && directory.length > 1) {
-						directoryPath = directory[1];
-						void this.container.storage.storeScoped('gk:cli:corePath', directoryPath).catch();
-					} else {
+					const installArgs = ['install'];
+					if (insidersEnabled && canSupportCliInsiders(cliVersion)) {
+						installArgs.push('--insiders');
+					}
+					const coreInstallOutput = await runCLICommand(installArgs, { cwd: globalStorageUri.fsPath });
+					if (!/Directory: (.*)/.test(coreInstallOutput)) {
 						throw new Error(`Failed to find core directory in install output: ${coreInstallOutput}`);
 					}
 
-					Logger.log(scope, 'CLI install completed');
+					scope?.info(`CLI installed (version: ${cliVersion}, path: ${cliPath})`);
 					cliInstallStatus = 'completed';
 					void this.container.storage
 						.storeScoped('gk:cli:install', {
@@ -681,6 +786,7 @@ export class GkCliIntegrationProvider implements Disposable {
 							attempts: cliInstallAttempts,
 							source: source,
 							version: cliVersion,
+							insiders: insidersEnabled,
 						});
 					}
 
@@ -698,14 +804,13 @@ export class GkCliIntegrationProvider implements Disposable {
 					try {
 						await workspace.fs.delete(cliProxyZipFilePath);
 					} catch (ex) {
-						Logger.warn(ex, scope, 'Failed to delete CLI proxy archive');
+						scope?.warn('Failed to delete CLI proxy archive', String(ex));
 					}
 				}
 			}
 		} catch (ex) {
-			Logger.error(
+			scope?.error(
 				ex,
-				scope,
 				`Failed to ${autoInstall ? 'auto-install' : 'install'} CLI: ${ex instanceof Error ? ex.message : 'Unknown error during installation'}`,
 			);
 			if (this.container.telemetry.enabled) {
@@ -714,6 +819,7 @@ export class GkCliIntegrationProvider implements Disposable {
 					attempts: cliInstallAttempts,
 					'error.message': ex instanceof Error ? ex.message : 'Unknown error',
 					source: source,
+					insiders: insidersEnabled,
 				});
 			}
 
@@ -727,13 +833,12 @@ export class GkCliIntegrationProvider implements Disposable {
 		return { cliVersion: cliVersion, cliPath: cliPath, status: cliInstallStatus };
 	}
 
-	@debug()
+	@trace()
 	private async authCLI(): Promise<void> {
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		const cliInstall = this.container.storage.getScoped('gk:cli:install');
-		const cliPath = this.container.storage.getScoped('gk:cli:path');
-		if (cliInstall?.status !== 'completed' || cliPath == null) return;
+		if (cliInstall?.status !== 'completed') return;
 
 		const currentSessionToken = (await this.container.subscription.getAuthenticationSession())?.accessToken;
 		if (currentSessionToken == null) return;
@@ -742,7 +847,7 @@ export class GkCliIntegrationProvider implements Disposable {
 			await runCLICommand(['auth', 'login', '-t', currentSessionToken]);
 		} catch (ex) {
 			debugger;
-			Logger.error(ex, scope);
+			scope?.error(ex, 'Failed to authenticate CLI');
 		}
 	}
 
@@ -759,6 +864,93 @@ export class GkCliIntegrationProvider implements Disposable {
 			registerCommand('gitlens.ai.mcp.authCLI', () => this.authCLI()),
 		];
 	}
+
+	@debug()
+	private async updateCliCore(): Promise<{ previous: string | undefined; current: string | undefined } | undefined> {
+		const scope = getScopedLogger();
+
+		try {
+			const previousVersion = await getCLIVersions();
+			await runCLICommand(['update']);
+			const currentVersion = await getCLIVersions();
+			this._cliCoreVersion = currentVersion?.core;
+
+			scope?.debug(`CLI core update (previous: ${previousVersion?.core}, current: ${currentVersion?.core})`);
+
+			return {
+				previous: previousVersion?.core,
+				current: currentVersion?.core,
+			};
+		} catch (ex) {
+			scope?.error(ex, 'Failed to update CLI');
+		}
+
+		return undefined;
+	}
+
+	@debug()
+	private async checkCliUpdateRequired(): Promise<{
+		needsUpdate: 'core' | 'proxy' | undefined;
+		core: string | undefined;
+		proxy: string | undefined;
+	}> {
+		const scope = getScopedLogger();
+
+		try {
+			const currentVersions = await getCLIVersions();
+			if (currentVersions == null) {
+				this._cliCoreVersion = undefined;
+				return {
+					needsUpdate: 'proxy',
+					core: undefined,
+					proxy: undefined,
+				};
+			}
+
+			const { core: currentCoreVersion, proxy: currentProxyVersion } = currentVersions;
+			this._cliCoreVersion = currentCoreVersion;
+
+			const { core: minimumCoreVersion, proxy: minimumProxyVersion } =
+				await this.container.productConfig.getCliMinimumVersions();
+
+			if (satisfies(fromString(currentProxyVersion), `< ${minimumProxyVersion}`)) {
+				return {
+					needsUpdate: 'proxy',
+					core: currentCoreVersion,
+					proxy: currentProxyVersion,
+				};
+			}
+
+			if (satisfies(fromString(currentCoreVersion), `< ${minimumCoreVersion}`)) {
+				return {
+					needsUpdate: 'core',
+					core: currentCoreVersion,
+					proxy: currentProxyVersion,
+				};
+			}
+
+			return {
+				needsUpdate: undefined,
+				core: currentCoreVersion,
+				proxy: currentProxyVersion,
+			};
+		} catch (ex) {
+			scope?.error(ex, 'Failed to get CLI version');
+			this._cliCoreVersion = undefined;
+		}
+
+		return {
+			needsUpdate: 'proxy',
+			core: undefined,
+			proxy: undefined,
+		};
+	}
+}
+
+// The CLI insiders flag was added in 3.1.51, so check for that version before allowing it to be used
+function canSupportCliInsiders(version: string | undefined): boolean {
+	if (version == null) return false;
+	return satisfies(fromString(version), '>= 3.1.51');
 }
 
 function reachedMaxAttempts(cliInstall?: StoredGkCLIInstallInfo): boolean {
@@ -846,5 +1038,62 @@ class McpSetupError extends Error {
 		this.cliVersion = cliVersion;
 		this.telemetryMessage = telemetryMessage;
 		Error.captureStackTrace?.(this, new.target);
+	}
+}
+
+// Discovery file helper functions
+
+/**
+ * Gets the discovery file path for a given workspace
+ */
+function getDiscoveryFilePath(processId: number, port: number, discoveryDir?: string): string {
+	discoveryDir ??= join(tmpdir(), 'gitkraken', 'gitlens');
+	return join(discoveryDir, `gitlens-ipc-server-${processId}-${port}.json`);
+}
+
+/**
+ * Creates a discovery file for the GitLens IPC server
+ */
+async function createDiscoveryFile(
+	server: { ipcToken: string; ipcAddress: string; ipcPort: number },
+	workspacePaths: string[],
+): Promise<string> {
+	const discoveryDir = join(tmpdir(), 'gitkraken', 'gitlens');
+	const filePath = getDiscoveryFilePath(ppid, server.ipcPort, discoveryDir);
+
+	// Create directory if it doesn't exist
+	await mkdir(discoveryDir, { recursive: true });
+
+	// Get host app information
+	const ideName = await getHostAppName();
+	const ideDisplayName = env.appName;
+
+	// Prepare discovery file content
+	const discoveryData = {
+		token: server.ipcToken,
+		address: server.ipcAddress,
+		port: server.ipcPort,
+		workspacePaths: workspacePaths,
+		ideName: ideName,
+		ideDisplayName: ideDisplayName,
+		scheme: env.uriScheme,
+		pid: ppid,
+		createdAt: new Date().toISOString(),
+	};
+
+	// Write file with restricted permissions (owner read/write only)
+	await writeFile(filePath, JSON.stringify(discoveryData, null, 2), { mode: 0o600 });
+
+	return filePath;
+}
+
+/**
+ * Cleans up the discovery file
+ */
+async function cleanupDiscoveryFile(filePath: string): Promise<void> {
+	try {
+		await unlink(filePath);
+	} catch (ex) {
+		Logger.warn(`${formatLoggableScopeBlock('IPC')} Failed to delete discovery file: ${ex}`);
 	}
 }

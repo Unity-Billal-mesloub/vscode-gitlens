@@ -5,14 +5,15 @@ import type { Container } from '../../container.js';
 import { relative } from '../../system/-webview/path.js';
 import { getWorkspaceFriendlyPath } from '../../system/-webview/vscode/workspaces.js';
 import { formatDate, fromNow } from '../../system/date.js';
+import { loggable } from '../../system/decorators/log.js';
 import { memoize } from '../../system/decorators/memoize.js';
-import { getLoggableName } from '../../system/logger.js';
-import { normalizePath } from '../../system/path.js';
+import { basename, normalizePath } from '../../system/path.js';
 import { getRepositoryOrWorktreePath } from '../utils/-webview/repository.utils.js';
 import { shortenRevision } from '../utils/revision.utils.js';
 import type { GitBranch } from './branch.js';
 import type { GitStatus } from './status.js';
 
+@loggable(i => i.uri.toString())
 export class GitWorktree {
 	constructor(
 		private readonly container: Container,
@@ -25,10 +26,6 @@ export class GitWorktree {
 		public readonly sha?: string,
 		public readonly branch?: GitBranch,
 	) {}
-
-	toString(): string {
-		return `${getLoggableName(this)}(${this.uri.toString()})`;
-	}
 
 	get date(): Date | undefined {
 		return this.branch?.date;
@@ -100,7 +97,7 @@ export class GitWorktree {
 			case 'bare':
 				return '(bare)';
 			case 'detached':
-				return shortenRevision(this.sha);
+				return `${basename(this.uri.fsPath)} (${shortenRevision(this.sha)})`;
 			default:
 				return this.branch?.name || this.friendlyPath;
 		}
@@ -111,7 +108,7 @@ export class GitWorktree {
 		return workspace.getWorkspaceFolder(this.uri);
 	}
 
-	@memoize<GitWorktree['formatDate']>(format => format ?? 'MMMM Do, YYYY h:mma')
+	@memoize<GitWorktree['formatDate']>({ resolver: format => format ?? 'MMMM Do, YYYY h:mma' })
 	formatDate(format?: string | null): string {
 		return this.date != null ? formatDate(this.date, format ?? 'MMMM Do, YYYY h:mma') : '';
 	}
@@ -161,6 +158,23 @@ export class GitWorktree {
 				});
 		}
 		return this._hasWorkingChangesPromise;
+	}
+
+	/** Creates a copy of this worktree with a different repoPath and updated branch — ONLY used for worktree-aware caching */
+	withRepoPath(repoPath: string): GitWorktree {
+		return repoPath === this.repoPath
+			? this
+			: new GitWorktree(
+					this.container,
+					this.isDefault,
+					this.type,
+					repoPath,
+					this.uri,
+					this.locked,
+					this.prunable,
+					this.sha,
+					this.branch?.withRepoPath(repoPath, true),
+				);
 	}
 }
 

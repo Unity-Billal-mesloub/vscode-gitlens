@@ -14,7 +14,6 @@ import type {
 	RepositoryChangeEvent,
 	RepositoryFileSystemChangeEvent,
 } from '../../../git/models/repository.js';
-import { RepositoryChange, RepositoryChangeComparisonMode } from '../../../git/models/repository.js';
 import { rootSha } from '../../../git/models/revision.js';
 import { getBranchMergeTargetName } from '../../../git/utils/-webview/branch.utils.js';
 import { sendFeedbackEvent, showUnhelpfulFeedbackPicker } from '../../../plus/ai/aiFeedbackUtils.js';
@@ -117,6 +116,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 		branchName?: string;
 		locked: boolean;
 		commitShas?: string[];
+		messages?: string[];
 		range?: { base: string; head: string };
 	} | null = null;
 
@@ -128,6 +128,9 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 
 	// AI conversation map for generate commits (keyed by hunks hash)
 	private _generateCommitsConversations = new Map<string, AIConversation>();
+
+	// Suppress the large prompt warning after the first successful AI action in this session
+	private _suppressLargePromptWarning = false;
 
 	constructor(
 		protected readonly container: Container,
@@ -165,11 +168,13 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 			...this.host.getTelemetryContext(),
 			'context.session.start': this._context.sessionStart,
 			'context.session.duration': this._context.sessionDuration,
-			'context.source': this._context.source,
+			'context.source':
+				typeof this._context.source === 'object' ? this._context.source.source : this._context.source,
 			'context.mode': this._context.mode,
 			'context.diff.files.count': this._context.diff.files,
 			'context.diff.hunks.count': this._context.diff.hunks,
 			'context.diff.lines.count': this._context.diff.lines,
+			'context.diff.hash': this._context.diff.hash,
 			'context.diff.staged.exists': this._context.diff.staged,
 			'context.diff.unstaged.exists': this._context.diff.unstaged,
 			'context.diff.unstaged.included': this._context.diff.unstagedIncluded,
@@ -290,24 +295,17 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 		headCommitSha?: string,
 		branchName?: string,
 		mode: 'experimental' | 'preview' = 'preview',
-		source?: Sources,
+		source?: Sources | Source,
 		commitShas?: string[],
 		isReload?: boolean,
 	): Promise<State> {
 		this._generateCommitsConversations.clear();
+		this._suppressLargePromptWarning = false;
 		this._currentRepository = repo;
 		this._hunks = hunks;
 
 		const safetyState = await createSafetyState(repo, diffs, baseCommit?.sha, headCommitSha, branchName);
 		this._safetyState = safetyState;
-		if (branchName || (baseCommit && headCommitSha)) {
-			this._recompose = {
-				enabled: true,
-				branchName: branchName,
-				locked: true,
-				commitShas: commitShas,
-			};
-		}
 
 		if (commitShas && commitShas.length > 0) {
 			const recomposeSet = new Set(commitShas);
@@ -316,6 +314,20 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 					commit.locked = true;
 				}
 			}
+		}
+
+		const messages = commitShas?.length
+			? commits.filter(c => c.sha && commitShas.includes(c.sha)).map(c => c.message.content)
+			: commits.map(c => c.message.content);
+
+		if (branchName || (baseCommit && headCommitSha)) {
+			this._recompose = {
+				enabled: true,
+				branchName: branchName,
+				locked: true,
+				commitShas: commitShas,
+				messages: messages,
+			};
 		}
 
 		const aiEnabled = this.getAiEnabled();
@@ -331,13 +343,14 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 		this._context.diff.files = new Set(hunks.map(h => h.fileName)).size;
 		this._context.diff.hunks = hunks.length;
 		this._context.diff.lines = hunks.reduce((total, hunk) => total + hunk.content.split('\n').length - 1, 0);
+		this._context.diff.hash = md5(hunks.map(h => h.content).join('\n'));
 		this._context.commits.initialCount = 0;
 		this._context.ai.enabled.org = aiEnabled.org;
 		this._context.ai.enabled.config = aiEnabled.config;
 		this._context.ai.model = aiModel;
 		this._context.onboarding.dismissed = onboardingDismissed;
 		this._context.onboarding.stepReached = onboardingStepReached;
-		this._context.source = source;
+		this._context.source = typeof source === 'string' ? { source: source } : source;
 		this._context.mode = mode;
 		this._context.warnings.workingDirectoryChanged = false;
 		this._context.warnings.indexChanged = false;
@@ -360,6 +373,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 			indexHasChanged: false,
 			repositoryState: this.getRepositoryState(),
 			recompose: this._recompose ?? null,
+			autoComposeInstructions: this._args?.autoComposeInstructions,
 		};
 	}
 
@@ -367,7 +381,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 		repo: Repository,
 		includedUnstagedChanges?: boolean,
 		mode: 'experimental' | 'preview' = 'preview',
-		source?: Sources,
+		source?: Sources | Source,
 		isReload?: boolean,
 	): Promise<State> {
 		const [diffsResult, commitResult, branchResult] = await Promise.allSettled([
@@ -453,7 +467,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 		repo: Repository,
 		branchName: string,
 		mode: 'experimental' | 'preview' = 'preview',
-		source?: Sources,
+		source?: Sources | Source,
 		commitShas?: string[],
 		isReload?: boolean,
 	): Promise<State> {
@@ -507,7 +521,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 					// Ensure that if commitShas is provided, error out if any of the commit shas are not found in the commits
 					if (commitShas) {
 						const commitShasSet = new Set(commitShas);
-						const missingShas = [...commitShasSet].filter(sha => !commits.find(c => c.sha === sha));
+						const missingShas = [...commitShasSet].filter(sha => !commits.some(c => c.sha === sha));
 						if (missingShas.length > 0) {
 							return {
 								...this.initialState,
@@ -598,7 +612,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 		branchName: string | undefined,
 		range: { base: string; head: string },
 		mode: 'experimental' | 'preview' = 'preview',
-		source?: Sources,
+		source?: Sources | Source,
 		commitShas?: string[],
 		isReload?: boolean,
 	): Promise<State> {
@@ -631,7 +645,8 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 		}
 
 		// Convert Map to Array and reverse to oldest first for processing
-		const branchCommits = Array.from(log.commits.values()).reverse();
+		// eslint-disable-next-line e18e/prefer-array-to-reversed
+		const branchCommits = [...log.commits.values()].reverse();
 
 		// Create composer commits and hunks from branch commits
 		const composerData = await createComposerCommitsFromGitCommits(repo, branchCommits);
@@ -649,7 +664,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 		// Validate that all provided commitShas are found in the commits (if provided)
 		if (commitShas && commitShas.length > 0) {
 			const commitShasSet = new Set(commitShas);
-			const missingShas = [...commitShasSet].filter(sha => !commits.find(c => c.sha === sha));
+			const missingShas = [...commitShasSet].filter(sha => !commits.some(c => c.sha === sha));
 			if (missingShas.length > 0) {
 				return {
 					...this.initialState,
@@ -737,6 +752,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 	private onReset(): void {
 		this._context.operations.reset.count++;
 		this._generateCommitsConversations.clear();
+		this._suppressLargePromptWarning = false;
 		this.host.sendTelemetryEvent('composer/action/reset');
 	}
 
@@ -769,6 +785,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 			// Clear cache to force fresh data on reload
 			this._cache.clear();
 			this._generateCommitsConversations.clear();
+			this._suppressLargePromptWarning = false;
 
 			let repo = this._currentRepository;
 			if (!repo || (params.repoPath != null && repo?.path !== params.repoPath)) {
@@ -920,6 +937,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 
 	private resetContext(): void {
 		this._context = { ...baseContext };
+		this._suppressLargePromptWarning = false;
 	}
 
 	onShowing(
@@ -1057,10 +1075,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 		const ignoreIndexChange = this._ignoreIndexChange;
 		this._ignoreIndexChange = false;
 		// Only care about index changes (staged/unstaged changes)
-		if (
-			!e.changed(RepositoryChange.Index, RepositoryChangeComparisonMode.Any) ||
-			(ignoreIndexChange && e.changed(RepositoryChange.Index, RepositoryChangeComparisonMode.Exclusive))
-		) {
+		if (!e.changed('index') || (ignoreIndexChange && e.changedExclusive('index'))) {
 			return;
 		}
 
@@ -1122,9 +1137,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 				const baseSha = params.commitsToReplace?.baseShaForNewDiff ?? this._safetyState.baseSha!;
 				let headSha = this._safetyState.headSha!;
 				if (params.commitsToReplace?.commits?.length) {
-					headSha =
-						params.commitsToReplace.commits[params.commitsToReplace.commits.length - 1].sha ??
-						this._safetyState.headSha!;
+					headSha = params.commitsToReplace.commits.at(-1)!.sha ?? this._safetyState.headSha!;
 				}
 
 				const shouldSkipDiffCalculation =
@@ -1192,12 +1205,14 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 			const result = await this.container.ai.actions.generateCommits(
 				hunks,
 				existingCommits,
+				this._recompose?.enabled ? (this._recompose.messages ?? []) : [],
 				hunks.map(m => ({ index: m.index, hunkHeader: m.hunkHeader })),
 				{ source: 'composer', correlationId: this.host.instanceId },
 				{
 					cancellation: this._generateCommitsCancellation.token,
 					customInstructions: params.customInstructions,
 					conversation: conversation,
+					suppressLargePromptWarning: this._suppressLargePromptWarning,
 				},
 			);
 
@@ -1215,6 +1230,9 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 			}
 
 			if (result && result !== 'cancelled') {
+				// Suppress the large prompt warning for the rest of this session
+				this._suppressLargePromptWarning = true;
+
 				if (result.commits.length === 0) {
 					this._context.operations.generateCommits.errorCount++;
 					this._context.errors.operation.count++;
@@ -1366,6 +1384,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 				{ source: 'composer', correlationId: this.host.instanceId },
 				{
 					cancellation: this._generateCommitMessageCancellation.token,
+					suppressLargePromptWarning: this._suppressLargePromptWarning,
 				},
 			);
 
@@ -1544,7 +1563,14 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 			}
 
 			// Create unreachable commits from patches
-			const shas = await repo.git.patch?.createUnreachableCommitsFromPatches(params.baseCommit?.sha, diffInfo);
+			// Get signing config to determine if commits should be signed
+			const signingConfig = await repo.git.config.getSigningConfig?.();
+			const shouldSign = signingConfig?.enabled ?? false;
+
+			const shas = await repo.git.patch?.createUnreachableCommitsFromPatches(params.baseCommit?.sha, diffInfo, {
+				sign: shouldSign,
+				source: { source: 'composer' },
+			});
 
 			if (!shas?.length) {
 				this._context.errors.operation.count++;
@@ -1559,7 +1585,7 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 
 			const baseRef = params.baseCommit?.sha ?? ((await repo.git.commits.getCommit('HEAD')) ? 'HEAD' : rootSha);
 			const resultingDiff = (
-				await repo.git.diff.getDiff?.(shas[shas.length - 1], baseRef, {
+				await repo.git.diff.getDiff?.(shas.at(-1)!, baseRef, {
 					notation: params.baseCommit?.sha ? '...' : undefined,
 				})
 			)?.contents;
@@ -1635,10 +1661,10 @@ export class ComposerWebviewProvider implements WebviewProvider<State, State, Co
 			if (this._recompose?.enabled && this._recompose.branchName) {
 				// Branch mode: update the specific branch to point to the new commits
 				// Use git update-ref to update the branch reference directly
-				await repo.git.refs.updateReference(`refs/heads/${this._recompose.branchName}`, shas[shas.length - 1]);
+				await repo.git.refs.updateReference(`refs/heads/${this._recompose.branchName}`, shas.at(-1)!);
 			} else {
 				// Working directory mode: reset the current branch to the new shas
-				await svc.ops?.reset(shas[shas.length - 1], { mode: 'hard' });
+				await svc.ops?.reset(shas.at(-1)!, { mode: 'hard' });
 			}
 
 			// Pop the stash we created to restore what is left in the working tree

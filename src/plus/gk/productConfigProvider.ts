@@ -4,8 +4,8 @@ import type { Container } from '../../container.js';
 import { deviceCohortGroup } from '../../system/-webview/vscode.js';
 import type { Lazy } from '../../system/lazy.js';
 import { lazy } from '../../system/lazy.js';
-import { getLoggableName, Logger } from '../../system/logger.js';
-import { startLogScope } from '../../system/logger.scope.js';
+import { getLoggableName } from '../../system/logger.js';
+import { maybeStartScopedLogger } from '../../system/logger.scope.js';
 import type { Validator } from '../../system/validation.js';
 import { createValidator, Is } from '../../system/validation.js';
 import type { Promo, PromoLocation, PromoPlans } from './models/promo.js';
@@ -13,6 +13,10 @@ import type { ServerConnection } from './serverConnection.js';
 
 type Config = {
 	promos: Promo[];
+	cli: {
+		minimumCoreVersion: string;
+		minimumProxyVersion: string;
+	};
 };
 
 type ConfigJson = {
@@ -20,6 +24,10 @@ type ConfigJson = {
 	v?: number;
 	promos?: PromoJson[];
 	promosV2?: PromoV2Json[];
+	cli?: {
+		minimumCoreVersion: string;
+		minimumProxyVersion: string;
+	};
 };
 type PromoJson = Replace<Promo, 'plan' | 'expiresOn' | 'startsOn', string | undefined> & {
 	v?: number;
@@ -29,12 +37,43 @@ type PromoV2Json = Replace<Promo, 'expiresOn' | 'startsOn', string | undefined> 
 
 const maxKnownPromoVersion = 2;
 
+const fallbackConfig: Config = {
+	promos: [
+		{
+			key: 'pro50',
+			plan: 'pro',
+			states: [
+				SubscriptionState.Community,
+				SubscriptionState.Trial,
+				SubscriptionState.TrialExpired,
+				SubscriptionState.TrialReactivationEligible,
+			],
+			locations: ['home', 'account', 'badge', 'gate'],
+			content: {
+				modal: { detail: 'Save up to 50% on GitLens Pro' },
+				quickpick: { detail: '$(star-full) Save up to 50% on GitLens Pro' },
+				webview: {
+					info: { html: '<b>Save up to 50%</b> on GitLens Pro' },
+					link: {
+						html: '<b>Save up to 50%</b> on GitLens Pro',
+						title: 'Upgrade now and Save up to 50% on GitLens Pro',
+					},
+				},
+			},
+		} satisfies Promo,
+	],
+	cli: {
+		minimumCoreVersion: '3.1.52',
+		minimumProxyVersion: '3.1.53',
+	},
+} as const;
+
 export class ProductConfigProvider {
 	private readonly _lazyConfig: Lazy<Promise<Config>>;
 
 	constructor(container: Container, connection: ServerConnection) {
 		this._lazyConfig = lazy(async () => {
-			using scope = startLogScope(`${getLoggableName(this)}.load`, false);
+			using scope = maybeStartScopedLogger(`${getLoggableName(this)}.load`);
 
 			let data;
 			const failed = {
@@ -77,7 +116,7 @@ export class ProductConfigProvider {
 				}
 			} catch (ex) {
 				failed.exception = ex;
-				Logger.error(ex, scope);
+				scope?.error(ex);
 				debugger;
 			}
 
@@ -91,38 +130,14 @@ export class ProductConfigProvider {
 			const stored = container.storage.get('product:config');
 			if (stored?.data != null) {
 				return {
+					...fallbackConfig,
 					...stored.data,
 					promos: stored.data.promos.map(p => ({ ...p, plan: p.plan ?? 'pro' }) satisfies Promo),
 				} satisfies Config;
 			}
 
 			// If all else fails, return a default set of promos
-			return {
-				promos: [
-					{
-						key: 'pro50',
-						plan: 'pro',
-						states: [
-							SubscriptionState.Community,
-							SubscriptionState.Trial,
-							SubscriptionState.TrialExpired,
-							SubscriptionState.TrialReactivationEligible,
-						],
-						locations: ['home', 'account', 'badge', 'gate'],
-						content: {
-							modal: { detail: 'Save up to 50% on GitLens Pro' },
-							quickpick: { detail: '$(star-full) Save up to 50% on GitLens Pro' },
-							webview: {
-								info: { html: '<b>Save up to 50%</b> on GitLens Pro' },
-								link: {
-									html: '<b>Save up to 50%</b> on GitLens Pro',
-									title: 'Upgrade now and Save up to 50% on GitLens Pro',
-								},
-							},
-						},
-					} satisfies Promo,
-				],
-			};
+			return fallbackConfig;
 		});
 	}
 
@@ -135,6 +150,14 @@ export class ProductConfigProvider {
 
 		const promos = await this.getPromos();
 		return getApplicablePromo(promos, state, plan, location);
+	}
+
+	async getCliMinimumVersions(): Promise<{ core: string; proxy: string }> {
+		const cli = (await this.getConfig()).cli;
+		return {
+			core: cli.minimumCoreVersion,
+			proxy: cli.minimumProxyVersion,
+		};
 	}
 
 	private getConfig(): Promise<Config> {
@@ -225,7 +248,13 @@ function createConfigValidator(): Validator<ConfigJson> {
 		percentile: Is.Optional(Is.Number),
 	});
 
+	const cliValidator = createValidator({
+		minimumCoreVersion: Is.String,
+		minimumProxyVersion: Is.String,
+	});
+
 	return createValidator<ConfigJson>({
+		cli: Is.Optional(cliValidator),
 		v: Is.Optional(Is.Number),
 		promos: Is.Optional(Is.Array(promoValidator)),
 		promosV2: Is.Optional(Is.Array(promoV2Validator)),
@@ -256,7 +285,9 @@ function getConfig(data: unknown): Config | undefined {
 	const validator = createConfigValidator();
 	if (!validator(data)) return undefined;
 
-	const promos = (data.promosV2 ?? data.promos ?? [])
+	const { promosV2, promos: promosV1, ...rest } = data;
+
+	const promos = (promosV2 ?? promosV1 ?? [])
 		// Filter out promos that we don't know how to handle
 		.filter(d => d.v == null || d.v <= maxKnownPromoVersion)
 		.map(
@@ -274,7 +305,11 @@ function getConfig(data: unknown): Config | undefined {
 				}) satisfies Promo,
 		);
 
-	const config: Config = { promos: promos };
+	const config: Config = {
+		...fallbackConfig,
+		...rest,
+		promos: promos,
+	};
 	return config;
 }
 

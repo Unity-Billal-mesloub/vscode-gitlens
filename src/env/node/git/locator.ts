@@ -1,6 +1,5 @@
 import { join as joinPaths } from 'path';
 import * as process from 'process';
-import { GlyphChars } from '../../../constants.js';
 import { any } from '../../../system/promise.js';
 import { maybeStopWatch } from '../../../system/stopwatch.js';
 import { findExecutable, run } from './shell.js';
@@ -27,13 +26,16 @@ export interface GitLocation {
 }
 
 async function findSpecificGit(path: string): Promise<GitLocation> {
-	const sw = maybeStopWatch(`findSpecificGit(${path})`, { logLevel: 'debug' });
+	const sw = maybeStopWatch(`findSpecificGit(path=${path})`, {
+		log: { level: 'debug', onlyExit: true },
+		scopeLabel: 'GIT',
+	});
 
 	let version;
 	try {
 		version = await run(path, ['--version'], 'utf8');
 	} catch (ex) {
-		sw?.stop({ message: ` ${GlyphChars.Dot} Unable to find git: ${ex}` });
+		sw?.stop({ message: `\u2022 Unable to find git: ${ex}` });
 
 		if (/bad config/i.test(ex.message)) throw new InvalidGitConfigError(ex);
 		throw ex;
@@ -41,13 +43,13 @@ async function findSpecificGit(path: string): Promise<GitLocation> {
 
 	// If needed, let's update our path to avoid the search on every command
 	if (!path || path === 'git') {
-		const foundPath = findExecutable(path, ['--version']).cmd;
+		const foundPath = (await findExecutable(path, ['--version'])).cmd;
 
 		// Ensure that the path we found works
 		try {
 			version = await run(foundPath, ['--version'], 'utf8');
 		} catch (ex) {
-			sw?.stop({ message: ` ${GlyphChars.Dot} Unable to find git: ${ex}` });
+			sw?.stop({ message: `\u2022 Unable to find git: ${ex}` });
 
 			if (/bad config/i.test(ex.message)) throw new InvalidGitConfigError(ex);
 			throw ex;
@@ -61,7 +63,7 @@ async function findSpecificGit(path: string): Promise<GitLocation> {
 		.replace(/^git version /, '')
 		.trim();
 
-	sw?.stop({ message: ` ${GlyphChars.Dot} Found ${parsed} in ${path}; ${version}` });
+	sw?.stop({ message: `\u2022 Found git v${parsed} in ${path}` });
 
 	return {
 		path: path,

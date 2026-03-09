@@ -80,12 +80,14 @@ export class RevertGitCommand extends QuickCommand<State> {
 			options.editMessage = false;
 		}
 
+		this.container.telemetry.sendEvent('gitCommand/run', { command: 'revert' });
+
 		try {
 			await state.repo.git.ops?.revert(refs, options);
 		} catch (ex) {
 			// Don't show an error message if the user intentionally aborted the revert
 			if (RevertError.is(ex, 'aborted')) {
-				Logger.log(ex.message, this.title);
+				Logger.debug(ex.message, this.title);
 				return;
 			}
 
@@ -99,6 +101,7 @@ export class RevertGitCommand extends QuickCommand<State> {
 			}
 
 			if (RevertError.is(ex, 'conflicts')) {
+				this.container.telemetry.sendEvent('gitCommand/conflict', { command: 'revert' });
 				void window.showWarningMessage(
 					'Unable to revert due to conflicts. Resolve the conflicts before continuing, or abort the revert.',
 				);

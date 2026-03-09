@@ -36,7 +36,7 @@ import { createReference } from '../../../../../git/utils/reference.utils.js';
 import { isUncommitted } from '../../../../../git/utils/revision.utils.js';
 import { getTagId } from '../../../../../git/utils/tag.utils.js';
 import { configuration } from '../../../../../system/-webview/configuration.js';
-import { log } from '../../../../../system/decorators/log.js';
+import { debug } from '../../../../../system/decorators/log.js';
 import { first, map } from '../../../../../system/iterable.js';
 import { getSettledValue } from '../../../../../system/promise.js';
 import { serializeWebviewItemContext } from '../../../../../system/webview.js';
@@ -46,9 +46,10 @@ import type {
 	GraphItemRefContext,
 	GraphTagContextValue,
 } from '../../../../../webviews/plus/graph/protocol.js';
+import { toTokenWithInfo } from '../../../authentication/models.js';
 import type { GitHubGitProviderInternal } from '../githubGitProvider.js';
 
-const doubleQuoteRegex = /"/g;
+const quoteRegex = /"/g;
 
 export class GraphGitSubProvider implements GitGraphSubProvider {
 	constructor(
@@ -57,7 +58,7 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 		private readonly provider: GitHubGitProviderInternal,
 	) {}
 
-	@log()
+	@debug()
 	async getGraph(
 		repoPath: string,
 		rev: string | undefined,
@@ -499,14 +500,14 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 		};
 	}
 
-	@log<GraphGitSubProvider['searchGraph']>({
-		args: {
-			1: s =>
-				`[${s.matchAll ? 'A' : ''}${s.matchCase ? 'C' : ''}${s.matchRegex ? 'R' : ''}${
-					s.matchWholeWord ? 'W' : ''
-				}]: ${s.query.length > 500 ? `${s.query.substring(0, 500)}...` : s.query}`,
-			2: o => `limit=${o?.limit}, ordering=${o?.ordering}`,
-		},
+	@debug({
+		args: (repoPath, s, o) => ({
+			repoPath: repoPath,
+			search: `[${s.matchAll ? 'A' : ''}${s.matchCase ? 'C' : ''}${s.matchRegex ? 'R' : ''}${
+				s.matchWholeWord ? 'W' : ''
+			}]: ${s.query.length > 500 ? `${s.query.substring(0, 500)}...` : s.query}`,
+			options: `limit=${o?.limit}, ordering=${o?.ordering}`,
+		}),
 	})
 	async *searchGraph(
 		repoPath: string,
@@ -517,15 +518,15 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 		return yield* this.searchGraphCore(repoPath, search, undefined, undefined, options, cancellation);
 	}
 
-	@log<GraphGitSubProvider['continueSearchGraph']>({
-		args: {
-			1: c =>
-				`[${c.search.matchAll ? 'A' : ''}${c.search.matchCase ? 'C' : ''}${c.search.matchRegex ? 'R' : ''}${
-					c.search.matchWholeWord ? 'W' : ''
-				}]: ${c.search.query.length > 500 ? `${c.search.query.substring(0, 500)}...` : c.search.query} (continue)`,
-			2: r => `results=${r.size}`,
-			3: o => `limit=${o?.limit}`,
-		},
+	@debug({
+		args: (repoPath, c, r, o) => ({
+			repoPath: repoPath,
+			cursor: `[${c.search.matchAll ? 'A' : ''}${c.search.matchCase ? 'C' : ''}${c.search.matchRegex ? 'R' : ''}${
+				c.search.matchWholeWord ? 'W' : ''
+			}]: ${c.search.query.length > 500 ? `${c.search.query.substring(0, 500)}...` : c.search.query} (continue)`,
+			existingResults: `results=${r.size}`,
+			options: `limit=${o?.limit}`,
+		}),
 	})
 	async *continueSearchGraph(
 		repoPath: string,
@@ -547,7 +548,6 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 		options?: { limit?: number; ordering?: 'date' | 'author-date' | 'topo' },
 		cancellation?: CancellationToken,
 	): AsyncGenerator<GitGraphSearchProgress, GitGraphSearch, void> {
-		// const scope = getLogScope();
 		search = { matchAll: false, matchCase: false, matchRegex: true, matchWholeWord: false, ...search };
 
 		const comparisonKey = getSearchQueryComparisonKey(search);
@@ -563,7 +563,7 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 			const values = operations.get('commit:');
 			if (values != null) {
 				const commitsResults = await Promise.allSettled(
-					map(values, v => this.provider.commits.getCommit(repoPath, v.replace(doubleQuoteRegex, ''))),
+					map(values, v => this.provider.commits.getCommit(repoPath, v.replace(quoteRegex, ''))),
 				);
 
 				let i = 0;
@@ -609,16 +609,20 @@ export class GraphGitSubProvider implements GitGraphSubProvider {
 			let hasMore = true;
 
 			while (hasMore && !cancellation?.isCancellationRequested) {
-				const result = await github.searchCommitShas(session.accessToken, query, {
-					cursor: apiCursor,
-					limit: limit,
-					sort:
-						options?.ordering === 'date'
-							? 'committer-date'
-							: options?.ordering === 'author-date'
-								? 'author-date'
-								: undefined,
-				});
+				const result = await github.searchCommitShas(
+					toTokenWithInfo(this.provider.authenticationProviderId, session),
+					query,
+					{
+						cursor: apiCursor,
+						limit: limit,
+						sort:
+							options?.ordering === 'date'
+								? 'committer-date'
+								: options?.ordering === 'author-date'
+									? 'author-date'
+									: undefined,
+					},
+				);
 
 				if (result == null || cancellation?.isCancellationRequested) {
 					break;

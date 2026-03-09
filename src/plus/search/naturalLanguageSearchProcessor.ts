@@ -3,8 +3,7 @@ import type { SearchQuery } from '../../constants.search.js';
 import type { Source } from '../../constants.telemetry.js';
 import type { Container } from '../../container.js';
 import { CancellationError } from '../../errors.js';
-import { Logger } from '../../system/logger.js';
-import { getLogScope } from '../../system/logger.scope.js';
+import { getScopedLogger } from '../../system/logger.scope.js';
 
 export interface NaturalLanguageSearchOptions {
 	context?: string;
@@ -22,7 +21,7 @@ export class NaturalLanguageSearchProcessor {
 	): Promise<SearchQuery> {
 		if (!searchQuery.naturalLanguage) return searchQuery;
 
-		const scope = getLogScope();
+		const scope = getScopedLogger();
 
 		searchQuery = { ...searchQuery, matchAll: false, matchCase: false, matchRegex: true };
 
@@ -47,7 +46,7 @@ export class NaturalLanguageSearchProcessor {
 				naturalLanguage: { query: searchQuery.query, processedQuery: result.result },
 			};
 		} catch (ex) {
-			Logger.error(ex, scope, `Failed to convert to search query: "${searchQuery.query}"`);
+			scope?.error(ex, `Failed to convert to search query: "${searchQuery.query}"`);
 
 			return {
 				...searchQuery,

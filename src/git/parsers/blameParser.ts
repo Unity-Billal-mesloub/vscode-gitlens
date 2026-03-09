@@ -43,7 +43,7 @@ export function parseGitBlame(
 	currentUser: GitUser | undefined,
 	modifiedTime?: number,
 ): GitBlame | undefined {
-	using sw = maybeStopWatch(`Git.parseBlame(${repoPath})`, { log: false, logLevel: 'debug' });
+	using sw = maybeStopWatch(`Git.parseBlame(${repoPath})`, { log: { onlyExit: true, level: 'debug' } });
 	if (!data) {
 		sw?.stop({ suffix: ` no data` });
 		return undefined;
@@ -181,7 +181,7 @@ export function parseGitBlame(
 		if (!c.author.name) continue;
 
 		const author = authors.get(c.author.name);
-		if (author == null) return undefined;
+		if (author == null) continue;
 
 		author.lineCount += c.lines.length;
 	}
@@ -264,7 +264,7 @@ function parseBlameEntry(
 	for (let i = 0, len = entry.lineCount; i < len; i++) {
 		const line: GitCommitLine = {
 			sha: entry.sha,
-			previousSha: commit.file!.previousSha,
+			previousSha: entry.previousSha ?? commit.file!.previousSha,
 			originalLine: entry.originalLine + i,
 			line: entry.line + i,
 		};
